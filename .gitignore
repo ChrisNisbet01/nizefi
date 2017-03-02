@@ -1,0 +1,10 @@
+/bin/
+/obj/
+/STM32F4_CoOs.elf.xcodeproj/
+/STMF4CoOS.elf.xcodeproj/
+/MKSCAT.elf.xcodeproj/
+*.vpj
+*.vpw
+*.vpwhistu
+*.vtg
+*.WK3
