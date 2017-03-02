@@ -187,10 +187,14 @@ int main(void)
 
   /*!< Create three tasks	*/
   printf("CoOS RTOS: Creating tasks\n");
-  CoCreateTask(taskA, 0, 0, &taskA_stk[STACK_SIZE_TASKA-1], STACK_SIZE_TASKA);
-  CoCreateTask(taskB, 0, 1, &taskB_stk[STACK_SIZE_TASKB-1], STACK_SIZE_TASKB);
-  CoCreateTask(taskC, 0, 2, &taskC_stk[STACK_SIZE_TASKC-1], STACK_SIZE_TASKC);
+  //CoCreateTask(taskA, 0, 0, &taskA_stk[STACK_SIZE_TASKA-1], STACK_SIZE_TASKA);
+  //CoCreateTask(taskB, 0, 1, &taskB_stk[STACK_SIZE_TASKB-1], STACK_SIZE_TASKB);
+  //CoCreateTask(taskC, 0, 2, &taskC_stk[STACK_SIZE_TASKC-1], STACK_SIZE_TASKC);
   CoCreateTask(taskD, 0, 3, &taskD_stk[STACK_SIZE_TASKD-1], STACK_SIZE_TASKD);
+  GPIO_SetBits(GPIOD, GPIO_Pin_12); 
+  GPIO_SetBits(GPIOD, GPIO_Pin_13);
+  GPIO_SetBits(GPIOD, GPIO_Pin_14);
+  GPIO_SetBits(GPIOD, GPIO_Pin_15);
 
   printf("CoOS RTOS: Starting scheduler\n");
   CoStartOS(); /*!< Start multitask	           */
