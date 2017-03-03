@@ -20,9 +20,9 @@
  */
 void PrintChar(char c)
 {
-  if (c=='\n') PrintChar('\r');
-  while (USART_GetFlagStatus(Open_USART, USART_FLAG_TXE) == RESET);
-  USART_SendData(Open_USART, (uint8_t) c);
+    void debug_put_char(char ch);
+
+    debug_put_char(c);
 }
 
 /** Maximum string size allowed (in bytes). */

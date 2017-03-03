@@ -27,6 +27,8 @@
 #include "stm32f4xx_rcc.h"
 #include "usart.h"
 
+#include "serial_task.h"
+
 /*---------------------------- Symbol Define -------------------------------*/
 #define STACK_SIZE_TASKA 128              /*!< Define "taskA" task size */
 #define STACK_SIZE_TASKB 128              /*!< Define "taskB" task size */
@@ -50,20 +52,23 @@ static void common_thread_task(char const * const task_name,
     printf("CoOS task %s: started\n", task_name);
     while (1)
     {
-        if (i & 1)
-        {
-            GPIO_SetBits(GPIOD, gpio_pin);
-        }
-        else
-        {
-            GPIO_ResetBits(GPIOD, gpio_pin);
-        }
-        i++;
-        CoTickDelay(delay_ticks);  //25 x 10ms = 250ms
         if (msg != NULL)
         {
             printf(msg);
         }
+        else
+        {
+            if (i & 1)
+            {
+                GPIO_SetBits(GPIOD, gpio_pin);
+            }
+            else
+            {
+                GPIO_ResetBits(GPIOD, gpio_pin);
+            }
+        }
+        CoTickDelay(delay_ticks);  //25 x 10ms = 250ms
+        i++;
     }
 }
 
@@ -96,11 +101,12 @@ int main(void)
 {
     SystemInit();
 
+#if 0
     USART_Configuration();
     printf("STM32F4-Discovery Board is running\n");
     printf("CoOS RTOS V-1.1.6; Demo for STM32F4\n");
     printf("-----------------------------------\n");
-
+#endif
     /* GPIOD Periph clock enable */
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
     /* Configure PD12, PD13, PD14 and PD15 in output push-pull mode */
@@ -119,6 +125,8 @@ int main(void)
     CoCreateTask(taskB, 0, 1, &taskB_stk[STACK_SIZE_TASKB - 1], STACK_SIZE_TASKB);
     CoCreateTask(taskC, 0, 2, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
     CoCreateTask(taskD, 0, 3, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
+
+    initSerialTask();
 
     printf("CoOS RTOS: Starting scheduler\n");
     CoStartOS(); /*!< Start multitask	           */

@@ -48,7 +48,8 @@ OPTIMISE_FLAGS = -O3
 
 
 INCLUDE_DIRS = 	$(SRC_DIR)/stdio \
-				$(SRC_DIR)/UART \
+				$(SRC_DIR)/drivers \
+				$(SRC_DIR)/tasks \
 				$(COOS_DIR) \
 				$(COOS_DIR)/portable \
 				$(COOS_DIR)/kernel
@@ -117,7 +118,10 @@ LDFLAGS = $(CPU_FLAGS) \
 # now specify source files
 COMMON_SRC = $(SRC_DIR)/stdio/*.c \
 			 $(SRC_DIR)/main.c \
-			 $(SRC_DIR)/UART/*.c
+			 $(SRC_DIR)/drivers/serial.c \
+			 $(SRC_DIR)/drivers/uart.c \
+			 $(SRC_DIR)/drivers/usart.c \
+			 $(SRC_DIR)/tasks/*.c
 
 COOS_SRC = $(COOS_DIR)/kernel/*.c \
            $(COOS_DIR)/portable/*.c
