@@ -21,8 +21,6 @@
 
 static volatile uint8_t Usart1TxBuffer[USART1_TX_BUFFER_SIZE];
 static volatile uint8_t Usart1RxBuffer[USART1_RX_BUFFER_SIZE];
-static volatile uint8_t Usart2TxBuffer[USART2_TX_BUFFER_SIZE];
-static volatile uint8_t Usart2RxBuffer[USART2_RX_BUFFER_SIZE];
 
 typedef struct serial_uart_statistics_st
 {
@@ -81,42 +79,14 @@ static const serial_port_methods_st uart_port_methods =
 
 static const uart_ports_config_t uart_ports[] =
 {
-#if defined(STM32F30X)
-	{
-	.port = SERIAL_UART_2,
-	.usart = USART2,
-	.rxBuffer = Usart2RxBuffer,
-	.rxBufferSize = sizeof Usart2RxBuffer,
-	.txBuffer = Usart2TxBuffer,
-	.txBufferSize = sizeof Usart2TxBuffer
-	}
-#elif defined(STM32F4XX)
     {
-        .port = SERIAL_UART_2,
-        .usart = USART2,
-        .rxBuffer = Usart2RxBuffer,
-        .rxBufferSize = sizeof Usart2RxBuffer,
-        .txBuffer = Usart2TxBuffer,
-        .txBufferSize = sizeof Usart2TxBuffer
+        .port = SERIAL_UART_1,
+        .usart = USART1,
+        .rxBuffer = Usart1RxBuffer,
+        .rxBufferSize = sizeof Usart1RxBuffer,
+        .txBuffer = Usart1TxBuffer,
+        .txBufferSize = sizeof Usart1TxBuffer
     }
-#elif defined(STM32F10X)
-	{
-	.port = SERIAL_UART_1,
-	.usart = USART1,
-	.rxBuffer = Usart1RxBuffer,
-	.rxBufferSize = sizeof Usart1RxBuffer,
-	.txBuffer = Usart1TxBuffer,
-	.txBufferSize = sizeof Usart1TxBuffer
-	},
-	{
-	.port = SERIAL_UART_2,
-	.usart = USART2,
-	.rxBuffer = Usart2RxBuffer,
-	.rxBufferSize = sizeof Usart2RxBuffer,
-	.txBuffer = Usart2TxBuffer,
-	.txBufferSize = sizeof Usart2TxBuffer
-	}
-#endif
 };
 
 #define NB_UART_PORTS	(sizeof(uart_ports)/sizeof(uart_ports[0]))
@@ -240,7 +210,7 @@ serial_port_st * uartOpen( serial_port_t port, uint32_t baudrate, serial_modes_t
 	    }
 
 	    USART_Cmd(uart_config->usart, ENABLE);
-
+        uart_config->usart->DR = 'A';
 		serialPort = &pctx->serialPort;
 	}
 

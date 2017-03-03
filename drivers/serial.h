@@ -4,8 +4,6 @@
 typedef enum serial_port_t
 {
 	SERIAL_UART_1,
-	SERIAL_UART_2,
-	SERIAL_USB
 } serial_port_t;
 
 typedef enum serial_modes_t

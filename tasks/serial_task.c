@@ -22,14 +22,7 @@ static OS_TID serialTaskID;
 
 static const serial_port_t serial_ports[] =
 {
-#if defined(STM32F30X)
-	SERIAL_UART_2,
-	SERIAL_USB
-#elif defined(STM32F4XX)
-    SERIAL_UART_2,
-#elif defined(STM32F10X)
-	SERIAL_UART_1
-#endif
+    SERIAL_UART_1,
 };
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
