@@ -165,12 +165,16 @@ void const * stm32_usart_init(usart_init_st *cfg)
     if (cfg->mode & usart_mode_tx)
     {
 #if defined(STM32F30X) || defined(STM32F4XX)
-	    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+        GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF;
+        GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
 	    GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;
 #elif defined(STM32F10X)
 	    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF_PP;
 #endif
         GPIO_InitStructure.GPIO_Pin = uart_config->txPin;
+#if defined(STM32F4XX)
+        GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+#endif
 
 #if defined(STM32F30X) || defined(STM32F4XX)
         /* connect pin to USART */
@@ -182,14 +186,16 @@ void const * stm32_usart_init(usart_init_st *cfg)
     if (cfg->mode & usart_mode_rx)
     {
 #if defined(STM32F30X) || defined(STM32F4XX)
-	    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF;
-	    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-	    GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;
+        GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+        GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
+        GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_NOPULL;
 #elif defined(STM32F10X)
 	    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_IPU;
 #endif
-
         GPIO_InitStructure.GPIO_Pin = uart_config->rxPin;
+#if defined(STM32F4XX)
+        GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+#endif
 #if defined(STM32F30X) || defined(STM32F4XX)
         /* connect pin to USART */
         GPIO_PinAFConfig(uart_config->gpioPort, uart_config->rxPinSource, uart_config->rxPinAF);
@@ -197,7 +203,7 @@ void const * stm32_usart_init(usart_init_st *cfg)
         GPIO_Init(uart_config->gpioPort, &GPIO_InitStructure);
     }
 
-	NVIC_InitTypeDef NVIC_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
 
     NVIC_InitStructure.NVIC_IRQChannel = uart_config->irq;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;	// TODO: configurable
@@ -205,47 +211,57 @@ void const * stm32_usart_init(usart_init_st *cfg)
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
 
+    uart_config->usart->DR = 't';
 done:
     return uart_config;
 }
 
-static void usartIrqHandler(usart_port_config_st const * const uart_config, usart_cb_st *runtime)
+static volatile int int_counter;
+
+static void usartIrqHandler(usart_port_config_st const * const uart_config, usart_cb_st * runtime)
 {
 #if defined(STM32F30X)
     uint32_t ISR = uart_config->usart->ISR;
-#elif defined(STM32F10X) || defined(STM32F4XX)
+#elif defined(STM32F10X)
     uint32_t ISR = uart_config->usart->SR;
 #endif
 
-    GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
+    {
+        //if (int_counter++ == 1000)
+        {
+            //int_counter = 0;
+            GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
+        }
+    }
 
-    if ((ISR & USART_FLAG_RXNE))
+    if (USART_GetITStatus(uart_config->usart, USART_IT_RXNE) != RESET)
     {
     	if (runtime->putRxChar != NULL)
     	{
-#if defined(STM32F30X)
-    		runtime->putRxChar( runtime->pv, uart_config->usart->RDR );
-#elif defined(STM32F10X) || defined(STM32F4XX)
     		runtime->putRxChar( runtime->pv, uart_config->usart->DR );
-#endif
     	}
     }
 
-    if ((ISR & USART_FLAG_TXE))
+    if (USART_GetITStatus(uart_config->usart, USART_IT_TXE) != RESET)
     {
-    	int ch;
+        int disable_ints = 1;
+        if (runtime->getTxChar != NULL)
+        {
+            int ch = runtime->getTxChar(runtime->pv);
 
-    	if (runtime->getTxChar != NULL && (ch=runtime->getTxChar( runtime->pv )) >= 0)
-    	{
-            USART_SendData(uart_config->usart, ch);
-    	}
-        else
+            if (ch >= 0)
+            {
+                USART_SendData(uart_config->usart, ch);
+                disable_ints = 0;
+            }
+        }
+        if (disable_ints)
         {
             USART_ITConfig(uart_config->usart, USART_IT_TXE, DISABLE);
         }
     }
 
-    if (ISR & USART_FLAG_ORE)
+    if (USART_GetITStatus(uart_config->usart, USART_IT_ORE) != RESET)
     {
         USART_ClearITPendingBit (uart_config->usart, USART_IT_ORE);
         // TODO: statistic?

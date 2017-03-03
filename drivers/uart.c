@@ -291,7 +291,8 @@ static int uartWriteCharBlockingWithTimeout(void * const pv, uint8_t const ch, u
 	int result = -1;
 	int timed_out = 0;
 
-	/* wait until the TX buffer can accept at least one more character */
+    GPIO_ToggleBits(GPIOD, GPIO_Pin_12);
+    /* wait until the TX buffer can accept at least one more character */
 	while (((pctx->txBufferHead + 1) % pctx->txBufferSize) == pctx->txBufferTail)
 	{
 		if (millisecs_counter >= max_millisecs_to_wait)
@@ -307,7 +308,8 @@ static int uartWriteCharBlockingWithTimeout(void * const pv, uint8_t const ch, u
 	    pctx->txBuffer[pctx->txBufferHead] = ch;
 	    pctx->txBufferHead = (pctx->txBufferHead + 1) % pctx->txBufferSize;
 
-	    USART_ITConfig(pctx->uartConfig->usart, USART_IT_TXE, ENABLE);
+        GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
+        USART_ITConfig(pctx->uartConfig->usart, USART_IT_TXE, ENABLE);
 	    result = 0;
 	}
 	else

@@ -7,6 +7,8 @@
 #include <coocox.h>
 #include <serial.h>
 
+#include <stm32f4xx_gpio.h>
+
 #define CLI_TASK_STACK_SIZE 0x200
 #define SERIAL_TASK_PRIORITY 4
 
@@ -42,7 +44,8 @@ static OS_FlagID periodicTasksTimerFlag;
 int uartPutChar( void * port, int ch )
 {
 	serial_port_st * serialPort = port;
-	int result = serialPort->methods->writeCharBlockingWithTimeout( serialPort->serialCtx, ch, 10 );
+
+    int result = serialPort->methods->writeCharBlockingWithTimeout(serialPort->serialCtx, ch, 10);
 
 	return result;
 }
@@ -51,7 +54,7 @@ void debug_put_char(char ch)
 {
     if (debug_port != NULL)
     {
-        debug_port->methods->writeCharBlockingWithTimeout(debug_port->serialCtx, (uint8_t)ch, 2);
+        uartPutChar(debug_port, ch);
     }
 }
 
