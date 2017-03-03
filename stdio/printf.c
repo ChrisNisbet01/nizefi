@@ -30,7 +30,8 @@ void PrintChar(char c)
 
 
 /** Required for proper compilation. */
-struct _reent r = {0, (FILE *) 0, (FILE *) 1, (FILE *) 0};
+//struct _reent r = {0, (FILE *) 0, (FILE *) 1, (FILE *) 0, 0};
+struct _reent r = {._inc = 0};
 struct _reent *_impure_ptr = &r;
 
 /**
@@ -270,7 +271,7 @@ signed int vsnprintf(char *pStr, size_t length, const char *pFormat, va_list ap)
     char          fill;
     unsigned char width;
     signed int    num = 0;
-    signed int    size = 0;
+    size_t size = 0;
 
     /* Clear the string */
     if (pStr) {

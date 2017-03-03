@@ -58,7 +58,7 @@ ifeq ($(TARGET),STM32F4_DISC1)
 INCLUDE_DIRS := $(INCLUDE_DIRS) \
 				$(SRC_DIR)/cmsis_boot/startup \
 				$(SRC_DIR)/cmsis_boot \
-				$(SRC_DIR)/cmsis_lib/include \
+				$(SRC_DIR)/Libraries/STM32F4xx_StdPeriph_Driver/inc \
 				$(SRC_DIR)/cmsis
 
 
@@ -75,10 +75,10 @@ CO_FLASH_PROCESSOR_TYPE = STM32F407VG
 CMSIS_BOOT_SRC = $(SRC_DIR)/cmsis_boot/startup/startup_stm32f4xx.c \
                  $(SRC_DIR)/cmsis_boot/*.c
 
-CMSIS_LIB_SRC = $(SRC_DIR)/cmsis_lib/source/*.c
+STD_PERIPHERAL_LIB_SRC = $(SRC_DIR)/Libraries/STM32F4xx_StdPeriph_Driver/src/*.c
 
 TARGET_SRC = $(CMSIS_BOOT_SRC) \
-             $(CMSIS_LIB_SRC)
+             $(STD_PERIPHERAL_LIB_SRC)
 
 endif
 
@@ -152,7 +152,7 @@ TARGET_DEPENDENCIES = $(patsubst %.o,%.d,$(OBJS)) $(patsubst %.o,%.d,$(OBJS_NO_L
 all: $(TARGET_HEX)
 
 program: $(TARGET_ELF)
-	openocd -f $(OPENOCD_PROC_FILE) -c "stm32f4_flash $(TARGET_HEX)" -c shutdown
+	openocd -f $(OPENOCD_PROC_FILE) -c "stm32f4_flash $(TARGET_ELF)" -c shutdown
 
 flash: all
 	$(CO_FLASH) program $(CO_FLASH_PROCESSOR_TYPE) $(TARGET_ELF) --adapter-name=ST-Link
@@ -164,7 +164,6 @@ $(TARGET_HEX): $(TARGET_ELF)
 	$(OBJCOPY) -O ihex --set-start 0x8000000 $< $@
 
 $(TARGET_ELF): $(OBJS) $(OBJS_NO_LTO)
-	echo "OBJS: $(OBJS) $(OBJS_NO_LTO)"
 	$(CC) -o $@ $^ $(LDFLAGS)
 	$(SIZE) $(TARGET_ELF)
 

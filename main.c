@@ -36,168 +36,96 @@
 /* Private typedef -----------------------------------------------------------*/
 GPIO_InitTypeDef GPIO_InitStructure;
 /*---------------------------- Variable Define -------------------------------*/
-OS_STK taskA_stk[STACK_SIZE_TASKA]; /*!< Define "taskA" task stack */
-OS_STK taskB_stk[STACK_SIZE_TASKB]; /*!< Define "taskB" task stack */
-OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define "taskC" task stack */
-OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
+static __attribute((aligned(8))) OS_STK taskA_stk[STACK_SIZE_TASKA]; /*!< Define "taskA" task stack */
+static __attribute((aligned(8))) OS_STK taskB_stk[STACK_SIZE_TASKB]; /*!< Define "taskB" task stack */
+static __attribute((aligned(8))) OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define "taskC" task stack */
+static __attribute((aligned(8))) OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
 
-/**
- *******************************************************************************
- * @brief       "taskA" task code
- * @param[in]   None
- * @param[out]  None
- * @retval      None
- * @par Description
- * @details    This task use to crate mutex and flags,print message "taskA running".
- *             Indicate "taskA" had been executed.
- *******************************************************************************
- */
-void taskA(void* pdata)
+static void common_thread_task(char const * const task_name, 
+                               char const * const msg,
+                               unsigned int gpio_pin, 
+                               unsigned int const delay_ticks)
 {
-  unsigned int a = 0;
-  printf("CoOS taskA: started\n");
-  while (1)
+    unsigned int i = 0;
+    printf("CoOS task %s: started\n", task_name);
+    while (1)
     {
-      if (a & 1)
+        if (i & 1)
         {
-          GPIO_SetBits(GPIOD, GPIO_Pin_12);
+            GPIO_SetBits(GPIOD, gpio_pin);
         }
-      else
+        else
         {
-          GPIO_ResetBits(GPIOD, GPIO_Pin_12);
+            GPIO_ResetBits(GPIOD, gpio_pin);
         }
-      a++;
-      CoTickDelay(25);  //25 x 10ms = 250ms
+        i++;
+        CoTickDelay(delay_ticks);  //25 x 10ms = 250ms
+        if (msg != NULL)
+        {
+            printf(msg);
+        }
     }
 }
 
-/**
- *******************************************************************************
- * @brief       "taskB" task code
- * @param[in]   None
- * @param[out]  None
- * @retval      None
- * @par Description
- * @details    This task use to print message "taskB running". Indicate "taskB"
- *             had been executed.
- *******************************************************************************
- */
+void taskA(void * pdata)
+{
+    (void)pdata;
+    common_thread_task("A", NULL, GPIO_Pin_12, CFG_SYSTICK_FREQ / 4);
+}
+
 void taskB(void* pdata)
 {
-  unsigned int b = 0;
-  printf("CoOS taskB: started\n");
-  while (1)
-    {
-      if (b & 1)
-        {
-          GPIO_SetBits(GPIOD, GPIO_Pin_13);
-        }
-      else
-        {
-          GPIO_ResetBits(GPIOD, GPIO_Pin_13);
-        }
-      b++;
-      CoTickDelay(25);  //50 x 10ms = 500ms
-    }
+    (void)pdata;
+    common_thread_task("B", NULL, GPIO_Pin_13, CFG_SYSTICK_FREQ / 4);
 }
 
-/**
- *******************************************************************************
- * @brief       "taskC" task code
- * @param[in]   None
- * @param[out]  None
- * @retval      None
- * @par Description
- * @details    This task use to print message "taskB running". Indicate "taskB"
- *             had been executed.
- *******************************************************************************
- */
 void taskC(void* pdata)
 {
-  unsigned int c = 0;
-  printf("CoOS taskC: started\n");
-  while (1)
-    {
-      if (c & 1)
-        {
-          GPIO_SetBits(GPIOD, GPIO_Pin_14);
-        }
-      else
-        {
-          GPIO_ResetBits(GPIOD, GPIO_Pin_14);
-        }
-      c++;
-      CoTickDelay(25);  //100 x 10ms = 1000ms
-    }
+    (void)pdata;
+    common_thread_task("C", NULL, GPIO_Pin_14, CFG_SYSTICK_FREQ / 4);
 }
 
-
-/**
- *******************************************************************************
- * @brief       "taskC" task code
- * @param[in]   None
- * @param[out]  None
- * @retval      None
- * @par Description
- * @details    This task use to print message "taskB running". Indicate "taskB"
- *             had been executed.
- *******************************************************************************
- */
 void taskD(void* pdata)
 {
-  unsigned int d = 0;
-  printf("CoOS taskD: started\n");
-  while (1)
-    {
-      if (d & 1)
-        {
-          GPIO_ResetBits(GPIOD, GPIO_Pin_15);
-        }
-      else
-        {
-          GPIO_SetBits(GPIOD, GPIO_Pin_15);
-        }
-      d++;
-      CoTickDelay(50);  //50 x 10ms = 500ms
-    }
+    (void)pdata;
+    common_thread_task("C", "1", GPIO_Pin_15, CFG_SYSTICK_FREQ);
 }
 
 
 int main(void)
 {
-  SystemInit();
-  USART_Configuration();
-  printf("STM32F4-Discovery Board is booting!\n");
-  printf("-----------------------------------\n");
-  printf("CoOS RTOS V-1.1.4; Demo for STM32F4\n");
-  printf("V-01 17.10.2012 (w) by psavr@gmx.ch\n");
-  printf("-----------------------------------\n");
+    SystemInit();
 
-  /* GPIOD Periph clock enable */
-  RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
-  /* Configure PD12, PD13, PD14 and PD15 in output pushpull mode */
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14  | GPIO_Pin_15;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
-  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-  GPIO_Init(GPIOD, &GPIO_InitStructure);
+    USART_Configuration();
+    printf("STM32F4-Discovery Board is running\n");
+    printf("CoOS RTOS V-1.1.6; Demo for STM32F4\n");
+    printf("-----------------------------------\n");
 
-  CoInitOS(); /*!< Initial CooCox CoOS          */
+    /* GPIOD Periph clock enable */
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
+    /* Configure PD12, PD13, PD14 and PD15 in output push-pull mode */
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14  | GPIO_Pin_15;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    GPIO_Init(GPIOD, &GPIO_InitStructure);
 
-  /*!< Create three tasks	*/
-  printf("CoOS RTOS: Creating tasks\n");
-  CoCreateTask(taskA, 0, 0, &taskA_stk[STACK_SIZE_TASKA-1], STACK_SIZE_TASKA);
-  CoCreateTask(taskB, 0, 1, &taskB_stk[STACK_SIZE_TASKB-1], STACK_SIZE_TASKB);
-  CoCreateTask(taskC, 0, 2, &taskC_stk[STACK_SIZE_TASKC-1], STACK_SIZE_TASKC);
-  CoCreateTask(taskD, 0, 3, &taskD_stk[STACK_SIZE_TASKD-1], STACK_SIZE_TASKD);
+    CoInitOS(); /*!< Initialise CoOS */
 
-  printf("CoOS RTOS: Starting scheduler\n");
-  CoStartOS(); /*!< Start multitask	           */
+    /*!< Create three tasks	*/
+    printf("CoOS RTOS: Creating tasks\n");
+    CoCreateTask(taskA, 0, 0, &taskA_stk[STACK_SIZE_TASKA - 1], STACK_SIZE_TASKA);
+    CoCreateTask(taskB, 0, 1, &taskB_stk[STACK_SIZE_TASKB - 1], STACK_SIZE_TASKB);
+    CoCreateTask(taskC, 0, 2, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
+    CoCreateTask(taskD, 0, 3, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
 
-  printf("CoOS RTOS: Scheduler stopped\n");
-  while (1)
-  {
-  }
+    printf("CoOS RTOS: Starting scheduler\n");
+    CoStartOS(); /*!< Start multitask	           */
+
+    printf("CoOS RTOS: Scheduler stopped\n");
+    while (1)
+    {
+    }
 }
 
