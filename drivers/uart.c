@@ -1,16 +1,12 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#if defined(STM32F30X)
-#include <stm32f30x_usart.h>
-#elif defined(STM32F10X)
-#include <stm32f10x_usart.h>
-#elif defined(STM32F4XX)
 #include <stm32f4xx_usart.h>
-#endif
 
 #include "usart.h"
 #include <CoOS.h>
+#include "OsArch.h"
+
 #include "uart_interface.h"
 #include "serial.h"
 

@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #undef errno
 extern int errno;
@@ -28,8 +29,9 @@ caddr_t _sbrk ( int incr )
   return (caddr_t) prev_heap;
 }
 
-int link(char *old, char *new) {
-return -1;
+int link(const char *old, const char *new) 
+{
+    return -1;
 }
 
 int _close(int file)
@@ -62,7 +64,11 @@ int _write(int file, char *ptr, int len)
 {
     int debug_put_block(void * data, size_t len);
 
-    len = debug_put_block(ptr, len);
+    if (file == STDOUT_FILENO || file == STDERR_FILENO)
+    {
+        len = debug_put_block(ptr, len);
+    }
+
     return len;
 }
 

@@ -60,8 +60,6 @@ void taskC(void* pdata)
 
 void taskD(void * pdata)
 {
-    OS_TCID debugTimerID;
-
     (void)pdata;
     common_thread_task("D", GPIO_Pin_13, CFG_SYSTICK_FREQ);
 }
@@ -93,7 +91,7 @@ int main(void)
 
     initSerialTask();
 
-    printf("CoOS RTOS: Starting scheduler\r\n");
+    fprintf(stderr, "CoOS RTOS: Starting scheduler\r\n");
 
     CoStartOS(); /*!< Start multitask	           */
 

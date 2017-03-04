@@ -93,7 +93,7 @@ static void handleNewSerialData( void )
 		{
 			while ( serialCli[uart_index].cli_uart->methods->rxReady( serialCli[uart_index].cli_uart->serialCtx ) )
 			{
-				uint8_t ch;
+				int ch;
 
 				ch = serialCli[uart_index].cli_uart->methods->readChar( serialCli[uart_index].cli_uart->serialCtx );
 
