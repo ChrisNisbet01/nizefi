@@ -44,7 +44,7 @@ COMMON_CFLAGS = -ffunction-sections \
 				-Wall \
 				-Wextra
 
-OPTIMISE_FLAGS = -O3
+OPTIMISE_FLAGS = -O2
 
 
 INCLUDE_DIRS = 	$(SRC_DIR)/stdio \
@@ -83,7 +83,7 @@ TARGET_SRC = $(CMSIS_BOOT_SRC) \
 
 endif
 
-LTO_FLAGS	 = -flto -fuse-linker-plugin
+#LTO_FLAGS	 = -flto -fuse-linker-plugin
 
 CFLAGS = $(COMMON_CFLAGS) \
 			$(OPTIMISE_FLAGS) \
@@ -96,6 +96,7 @@ CFLAGS = $(COMMON_CFLAGS) \
 			$(FPU_DEFINES) \
 			$(addprefix -D,$(PLATFORM_FLAGS)) \
 			$(addprefix -D,$(USER_OPTIONS)) \
+			$(LTO_FLAGS) \
 			-MMD
 
 COMMON_LDFLAGS = -g \
@@ -142,6 +143,7 @@ SRC_FILES_NO_LTO = $(COOS_SRC_NO_LTO) \
 OBJS = $(patsubst %.c,%.o,$(wildcard $(SRC_FILES)))
 # add .S files to object list
 OBJS := $(patsubst %.S,%.o,$(OBJS))
+OBJS := $(patsubst %.s,%.o,$(OBJS))
 # prepend obj directory to object list
 OBJS := $(OBJS:%=$(OBJ_DIR)/%)
 
@@ -155,8 +157,8 @@ TARGET_DEPENDENCIES = $(patsubst %.o,%.d,$(OBJS)) $(patsubst %.o,%.d,$(OBJS_NO_L
 
 all: $(TARGET_HEX)
 
-program: $(TARGET_ELF)
-	openocd -f $(OPENOCD_PROC_FILE) -c "stm32f4_flash $(TARGET_ELF)" -c shutdown
+program: $(TARGET_HEX)
+	openocd -f $(OPENOCD_PROC_FILE) -c "stm32f4_flash $<" -c shutdown
 
 flash: all
 	$(CO_FLASH) program $(CO_FLASH_PROCESSOR_TYPE) $(TARGET_ELF) --adapter-name=ST-Link

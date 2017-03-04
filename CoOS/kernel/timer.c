@@ -208,7 +208,6 @@ OS_TCID CoCreateTmr(U8 tmrType, U32 tmrCnt, U32 tmrReload, vFUNCPtr func)
         if((TmrIDVessel & (1 << i)) == 0) /* Is free timer ID?                */
         {
             TmrIDVessel |= (1<<i);        /* Yes,assign ID to this timer      */
-            OsSchedUnlock();              /* Unlock schedule                  */
             TmrTbl[i].tmrID     = i;      /* Initialize timer as user set     */
             TmrTbl[i].tmrType   = tmrType;
             TmrTbl[i].tmrState  = TMR_STATE_STOPPED;
@@ -217,6 +216,7 @@ OS_TCID CoCreateTmr(U8 tmrType, U32 tmrCnt, U32 tmrReload, vFUNCPtr func)
             TmrTbl[i].tmrCallBack = func;
             TmrTbl[i].tmrPrev   = Co_NULL;
             TmrTbl[i].tmrNext   = Co_NULL;
+            OsSchedUnlock();              /* Unlock schedule                  */
             GPIO_SetBits(GPIOD, GPIO_Pin_12);
             return i;                     /* Return timer ID                  */
         }

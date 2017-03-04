@@ -10,7 +10,7 @@
 #include <stm32f4xx_gpio.h>
 
 #define CLI_TASK_STACK_SIZE 1024
-#define SERIAL_TASK_PRIORITY 4
+#define SERIAL_TASK_PRIORITY 3
 
 typedef struct serialCli_st
 {
@@ -31,8 +31,8 @@ static const serial_port_t serial_ports[] =
 static serialCli_st serialCli[ARRAY_SIZE(serial_ports)];
 
 serial_port_st *debug_port;
-static OS_FlagID cliUartFlag;
 static OS_FlagID periodicTasksTimerFlag;
+static OS_FlagID cliUartFlag;
 
 int uartPutChar( void * port, int ch )
 {
@@ -53,13 +53,20 @@ void debug_put_char(char ch)
 
 static void debugTimer( void )
 {
-	isr_SetFlag( periodicTasksTimerFlag );
+    GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
+    isr_SetFlag( periodicTasksTimerFlag );
+}
+
+static void debugTimer2(void)
+{
+    GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
 }
 
 static void newUartData( void *pv )
 {
 	UNUSED(pv);
 
+    GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
     CoEnterISR();
 
 	isr_SetFlag(cliUartFlag);
@@ -107,9 +114,8 @@ static void cli_task( void *pv )
 	UNUSED(pv);
 
     printf("creating timer\r\n");
-    debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer);
-    GPIO_SetBits(GPIOD, GPIO_Pin_13);
-    printf("created timer %d\r\n", debugTimerID);
+    //debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer);
+    //printf("created timer %d\r\n", debugTimerID);
     //CoStartTmr( debugTimerID );
 
 	while (1)
@@ -118,18 +124,19 @@ static void cli_task( void *pv )
         U32 readyFlags = (1 << cliUartFlag);
 
         GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
-        //readyFlags = CoWaitForMultipleFlags((1 << periodicTasksTimerFlag) | (1 << cliUartFlag), OPT_WAIT_ANY, 0, &err);
-        CoTickDelay(CFG_SYSTICK_FREQ);
-        if ((readyFlags & (1 << cliUartFlag)))
-        {
-	 		handleNewSerialData();
-        }
+            
+            //readyFlags = CoWaitForMultipleFlags((1 << periodicTasksTimerFlag) | (1 << cliUartFlag), OPT_WAIT_ANY, 0, &err);
+            readyFlags = CoWaitForMultipleFlags((1 << cliUartFlag), OPT_WAIT_ANY, 0, &err);
+            if ((readyFlags & (1 << cliUartFlag)))
+            {
+                handleNewSerialData();
+            }
 
-        if ((readyFlags & (1 << periodicTasksTimerFlag)))
-        {
-	 		doPeriodicTasks();
+            if ((readyFlags & (1 << periodicTasksTimerFlag)))
+            {
+                doPeriodicTasks();
+            }
         }
-	}
 }
 
 bool setDebugPort( int port )
@@ -157,13 +164,19 @@ void initSerialTask( void )
 {
 	unsigned int cli_index;
 
-	cliUartFlag = CoCreateFlag( Co_TRUE, Co_FALSE );
-	periodicTasksTimerFlag = CoCreateFlag( Co_TRUE, Co_FALSE );
+    periodicTasksTimerFlag = CoCreateFlag(Co_TRUE, Co_FALSE);
+    cliUartFlag = CoCreateFlag(Co_TRUE, Co_FALSE);
 
 	for ( cli_index = 0 ; cli_index < ARRAY_SIZE(serial_ports); cli_index++ )
 	{
 		serialCli[cli_index].cli_uart = serialOpen( serial_ports[cli_index], 115200, uart_mode_rx | uart_mode_tx, newUartData );
 	}
+    setDebugPort(0); 
+
+    printf("usart flag %d", cliUartFlag);
+
+    //printf("p flag %d\r\n", periodicTasksTimerFlag); 
 
     serialTaskID = CoCreateTask(cli_task, Co_NULL, SERIAL_TASK_PRIORITY, &cli_task_stack[CLI_TASK_STACK_SIZE - 1], CLI_TASK_STACK_SIZE);
+    printf("serial task id %d\r\n", serialTaskID);
 }

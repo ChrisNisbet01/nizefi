@@ -48,7 +48,6 @@ static void common_thread_task(char const * const task_name,
                                unsigned int gpio_pin, 
                                unsigned int const delay_ticks)
 {
-    unsigned int i = 0;
     printf("CoOS task %s: started\r\n", task_name);
     while (1)
     {
@@ -58,17 +57,9 @@ static void common_thread_task(char const * const task_name,
         }
         else
         {
-            if (i & 1)
-            {
-                GPIO_SetBits(GPIOD, gpio_pin);
-            }
-            else
-            {
-                GPIO_ResetBits(GPIOD, gpio_pin);
-            }
+            GPIO_ToggleBits(GPIOD, gpio_pin); 
         }
         CoTickDelay(delay_ticks);  //25 x 10ms = 250ms
-        i++;
     }
 }
 
@@ -90,8 +81,29 @@ void taskC(void* pdata)
     common_thread_task("C", NULL, GPIO_Pin_12, CFG_SYSTICK_FREQ / 4);
 }
 
-void taskD(void* pdata)
+OS_FlagID periodicTasksTimerFlag;
+
+static void debugTimer(void)
 {
+    GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
+    isr_SetFlag(periodicTasksTimerFlag);
+}
+
+OS_FlagID periodicTasksTimerFlag;
+OS_FlagID periodicTasksTimerFlag2; 
+
+void taskD(void * pdata)
+{
+    OS_TCID debugTimerID;
+
+    periodicTasksTimerFlag = CoCreateFlag(Co_TRUE, Co_FALSE); 
+    //periodicTasksTimerFlag2 = CoCreateFlag(Co_TRUE, Co_FALSE); 
+
+    printf("creating timer in taskd\r\n");
+    debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ/3, CFG_SYSTICK_FREQ/3, debugTimer);
+    printf("created timer %d\r\n", debugTimerID);
+    CoStartTmr( debugTimerID );
+
     (void)pdata;
     common_thread_task("D", "1", GPIO_Pin_13, CFG_SYSTICK_FREQ);
 }
@@ -101,12 +113,6 @@ int main(void)
 {
     SystemInit();
 
-#if 0
-    USART_Configuration();
-    printf("STM32F4-Discovery Board is running\n");
-    printf("CoOS RTOS V-1.1.6; Demo for STM32F4\n");
-    printf("-----------------------------------\n");
-#endif
     /* GPIOD Periph clock enable */
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
     /* Configure PD12, PD13, PD14 and PD15 in output push-pull mode */
@@ -121,8 +127,8 @@ int main(void)
 
     /*!< Create three tasks	*/
     //printf("CoOS RTOS: Creating tasks\n");
-    CoCreateTask(taskC, 0, 2, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
-    CoCreateTask(taskD, 0, 3, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
+    CoCreateTask(taskC, 0, 1, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
+    CoCreateTask(taskD, 0, 2, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
 
     initSerialTask();
     setDebugPort(0);
