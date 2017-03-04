@@ -83,7 +83,7 @@ TARGET_SRC = $(CMSIS_BOOT_SRC) \
 
 endif
 
-#LTO_FLAGS	 = -flto -fuse-linker-plugin
+LTO_FLAGS	 = -flto -fuse-linker-plugin
 
 CFLAGS = $(COMMON_CFLAGS) \
 			$(OPTIMISE_FLAGS) \

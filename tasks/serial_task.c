@@ -107,7 +107,7 @@ static void cli_task( void *pv )
 	UNUSED(pv);
 
     printf("creating timer\r\n");
-    //debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer);
+    debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer);
     GPIO_SetBits(GPIOD, GPIO_Pin_13);
     printf("created timer %d\r\n", debugTimerID);
     //CoStartTmr( debugTimerID );
@@ -127,7 +127,7 @@ static void cli_task( void *pv )
 
         if ((readyFlags & (1 << periodicTasksTimerFlag)))
         {
-	 		//doPeriodicTasks();
+	 		doPeriodicTasks();
         }
 	}
 }
