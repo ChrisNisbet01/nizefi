@@ -41,7 +41,6 @@ static __attribute((aligned(8))) OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define
 static __attribute((aligned(8))) OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
 
 static void common_thread_task(char const * const task_name, 
-                               char const * const msg,
                                unsigned int gpio_pin, 
                                unsigned int const delay_ticks)
 {
@@ -51,34 +50,15 @@ static void common_thread_task(char const * const task_name,
     printf("CoOS task %s: started x %d, %3f pi %f\r\n", task_name, 1, 1.2, f);
     while (1)
     {
-        if (msg != NULL)
-        {
-            printf("%s\r\n", msg);
-        }
-        else
-        {
-            GPIO_ToggleBits(GPIOD, gpio_pin); 
-        }
-        CoTickDelay(delay_ticks);  //25 x 10ms = 250ms
+        GPIO_ToggleBits(GPIOD, gpio_pin); 
+        CoTickDelay(delay_ticks);
     }
-}
-
-void taskA(void * pdata)
-{
-    (void)pdata;
-    common_thread_task("A", NULL, GPIO_Pin_12, CFG_SYSTICK_FREQ / 4);
-}
-
-void taskB(void* pdata)
-{
-    (void)pdata;
-    common_thread_task("B", NULL, GPIO_Pin_13, CFG_SYSTICK_FREQ / 4);
 }
 
 void taskC(void* pdata)
 {
     (void)pdata;
-    common_thread_task("C", NULL, GPIO_Pin_12, CFG_SYSTICK_FREQ / 4);
+    common_thread_task("C", GPIO_Pin_12, CFG_SYSTICK_FREQ / 4);
 }
 
 void taskD(void * pdata)
@@ -86,7 +66,7 @@ void taskD(void * pdata)
     OS_TCID debugTimerID;
 
     (void)pdata;
-    common_thread_task("D", "1", GPIO_Pin_13, CFG_SYSTICK_FREQ);
+    common_thread_task("D", GPIO_Pin_13, CFG_SYSTICK_FREQ);
 }
 
 
@@ -114,6 +94,12 @@ int main(void)
     setDebugPort(0);
 
     printf("CoOS RTOS: Starting scheduler\n");
+    {
+        float f = 4.4;
+        printf("%s: %3f pi %f\r\n", "blah", 1.2, f);
+        printf("%s: x %d, %3f pi %f\r\n", "blah", 1, 1.2, f);
+    }
+
     CoStartOS(); /*!< Start multitask	           */
 
     //printf("CoOS RTOS: Scheduler stopped\n");
