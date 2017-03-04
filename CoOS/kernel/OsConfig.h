@@ -66,7 +66,7 @@ Max number of tasks that can be running.
 Idle task stack size(word).
 */
 #if CFG_CHIP_TYPE == 3
-#define CFG_IDLE_STACK_SIZE     (58)
+#define CFG_IDLE_STACK_SIZE     (1024)
 #else
 #define CFG_IDLE_STACK_SIZE     (25)
 #endif
@@ -209,7 +209,7 @@ Enable(1) or disable(0) timer management.
 Specify max number timer.(must be less than 32)
 */
 #if CFG_TMR_EN >0
-#define CFG_MAX_TMR             (5)
+#define CFG_MAX_TMR             (15)
 #endif
 
 

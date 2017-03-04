@@ -123,8 +123,8 @@ void const * stm32_usart_init(usart_init_st *cfg)
 
     if (cfg->mode & usart_mode_rx)
     {
-        GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
-        GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_NOPULL;
+        GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+        GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;
         GPIO_InitStructure.GPIO_Pin = uart_config->rxPin;
 
         /* connect pin to USART */
@@ -145,18 +145,11 @@ done:
     return uart_config;
 }
 
-static volatile int int_counter;
-
 static void usartIrqHandler(usart_port_config_st const * const uart_config, usart_cb_st * runtime)
 {
-    //if (int_counter++ == 1000)
-    {
-        //int_counter = 0;
-        GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
-    }
-
     if (USART_GetITStatus(uart_config->usart, USART_IT_RXNE) != RESET)
     {
+        /* Receive data ready. */
     	if (runtime->putRxChar != NULL)
     	{
     		runtime->putRxChar( runtime->pv, uart_config->usart->DR );
@@ -165,8 +158,11 @@ static void usartIrqHandler(usart_port_config_st const * const uart_config, usar
 
     if (USART_GetITStatus(uart_config->usart, USART_IT_TXE) != RESET)
     {
-        int disable_ints = 1;
+        int disable_transmit = 1;
 
+        /* Transmit register empty. Either send another char if one is 
+         * ready or shut TX down. 
+         */
         if (runtime->getTxChar != NULL)
         {
             int ch = runtime->getTxChar(runtime->pv);
@@ -174,10 +170,10 @@ static void usartIrqHandler(usart_port_config_st const * const uart_config, usar
             if (ch >= 0)
             {
                 USART_SendData(uart_config->usart, ch);
-                disable_ints = 0;
+                disable_transmit = 0;
             }
         }
-        if (disable_ints)
+        if (disable_transmit)
         {
             USART_ITConfig(uart_config->usart, USART_IT_TXE, DISABLE);
         }

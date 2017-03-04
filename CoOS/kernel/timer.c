@@ -40,7 +40,7 @@
 
 /*---------------------------- Include ---------------------------------------*/
 #include <coocox.h>
-
+#include "stm32f4xx_gpio.h"
 /*---------------------------- Variable Define -------------------------------*/
 #if CFG_TMR_EN > 0
 
@@ -191,6 +191,7 @@ static void RemoveTmrList(OS_TCID tmrID)
 OS_TCID CoCreateTmr(U8 tmrType, U32 tmrCnt, U32 tmrReload, vFUNCPtr func)
 {
     U8 i;
+
 #if CFG_PAR_CHECKOUT_EN >0              /* Check validity of parameter        */
     if((tmrType != TMR_TYPE_ONE_SHOT) && (tmrType != TMR_TYPE_PERIODIC))
     {
@@ -216,6 +217,7 @@ OS_TCID CoCreateTmr(U8 tmrType, U32 tmrCnt, U32 tmrReload, vFUNCPtr func)
             TmrTbl[i].tmrCallBack = func;
             TmrTbl[i].tmrPrev   = Co_NULL;
             TmrTbl[i].tmrNext   = Co_NULL;
+            GPIO_SetBits(GPIOD, GPIO_Pin_12);
             return i;                     /* Return timer ID                  */
         }
     }

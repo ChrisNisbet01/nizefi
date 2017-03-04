@@ -30,10 +30,10 @@
 #include "serial_task.h"
 
 /*---------------------------- Symbol Define -------------------------------*/
-#define STACK_SIZE_TASKA 512              /*!< Define "taskA" task size */
-#define STACK_SIZE_TASKB 512              /*!< Define "taskB" task size */
-#define STACK_SIZE_TASKC 512              /*!< Define "taskC" task size */
-#define STACK_SIZE_TASKD 512              /*!< Define "taskD" task size */
+#define STACK_SIZE_TASKA 1024              /*!< Define "taskA" task size */
+#define STACK_SIZE_TASKB 1024              /*!< Define "taskB" task size */
+#define STACK_SIZE_TASKC 1024              /*!< Define "taskC" task size */
+#define STACK_SIZE_TASKD 1024              /*!< Define "taskD" task size */
 
 /* Private typedef -----------------------------------------------------------*/
 GPIO_InitTypeDef GPIO_InitStructure;
@@ -49,12 +49,12 @@ static void common_thread_task(char const * const task_name,
                                unsigned int const delay_ticks)
 {
     unsigned int i = 0;
-    printf("CoOS task %s: started\n", task_name);
+    printf("CoOS task %s: started\r\n", task_name);
     while (1)
     {
         if (msg != NULL)
         {
-            printf(msg);
+            printf("%s\r\n", msg);
         }
         else
         {
@@ -87,13 +87,13 @@ void taskB(void* pdata)
 void taskC(void* pdata)
 {
     (void)pdata;
-    common_thread_task("C", NULL, GPIO_Pin_14, CFG_SYSTICK_FREQ / 4);
+    common_thread_task("C", NULL, GPIO_Pin_12, CFG_SYSTICK_FREQ / 4);
 }
 
 void taskD(void* pdata)
 {
     (void)pdata;
-    common_thread_task("C", "1", GPIO_Pin_15, CFG_SYSTICK_FREQ);
+    common_thread_task("D", "1", GPIO_Pin_13, CFG_SYSTICK_FREQ);
 }
 
 
@@ -121,11 +121,12 @@ int main(void)
 
     /*!< Create three tasks	*/
     //printf("CoOS RTOS: Creating tasks\n");
-    //CoCreateTask(taskC, 0, 2, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
+    CoCreateTask(taskC, 0, 2, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
     CoCreateTask(taskD, 0, 3, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
 
     initSerialTask();
     setDebugPort(0);
+
     //printf("CoOS RTOS: Starting scheduler\n");
     CoStartOS(); /*!< Start multitask	           */
 

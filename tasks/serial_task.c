@@ -9,7 +9,7 @@
 
 #include <stm32f4xx_gpio.h>
 
-#define CLI_TASK_STACK_SIZE 0x200
+#define CLI_TASK_STACK_SIZE 1024
 #define SERIAL_TASK_PRIORITY 4
 
 typedef struct serialCli_st
@@ -60,7 +60,7 @@ static void newUartData( void *pv )
 {
 	UNUSED(pv);
 
-	CoEnterISR();
+    CoEnterISR();
 
 	isr_SetFlag(cliUartFlag);
 
@@ -82,7 +82,10 @@ static void handleNewSerialData( void )
 				ch = serialCli[uart_index].cli_uart->methods->readChar( serialCli[uart_index].cli_uart->serialCtx );
 
                 /* Just echo the char back for now. */
-                uartPutChar(serialCli[uart_index].cli_uart, ch);
+                if (ch >= 0)
+                {
+                    uartPutChar(serialCli[uart_index].cli_uart, ch);
+                }
 			}
 		}
 	}
@@ -103,15 +106,20 @@ static void cli_task( void *pv )
 
 	UNUSED(pv);
 
-	debugTimerID = CoCreateTmr( TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer );
-	CoStartTmr( debugTimerID );
+    printf("creating timer\r\n");
+    //debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer);
+    GPIO_SetBits(GPIOD, GPIO_Pin_13);
+    printf("created timer %d\r\n", debugTimerID);
+    //CoStartTmr( debugTimerID );
 
 	while (1)
 	{
 		StatusType err;
-		U32 readyFlags;
+        U32 readyFlags = (1 << cliUartFlag);
 
-		readyFlags = CoWaitForMultipleFlags( (1 << periodicTasksTimerFlag) | (1 << cliUartFlag), OPT_WAIT_ANY, 0, &err );
+        GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
+        //readyFlags = CoWaitForMultipleFlags((1 << periodicTasksTimerFlag) | (1 << cliUartFlag), OPT_WAIT_ANY, 0, &err);
+        CoTickDelay(CFG_SYSTICK_FREQ);
         if ((readyFlags & (1 << cliUartFlag)))
         {
 	 		handleNewSerialData();
@@ -119,7 +127,7 @@ static void cli_task( void *pv )
 
         if ((readyFlags & (1 << periodicTasksTimerFlag)))
         {
-	 		doPeriodicTasks();
+	 		//doPeriodicTasks();
         }
 	}
 }
@@ -128,12 +136,19 @@ bool setDebugPort( int port )
 {
 	bool debugPortAssigned = true;
 
-	if ( port < 0 )
+    if (port < 0)
+
+    {
 		debug_port = NULL;
-	else if ( (unsigned)port < ARRAY_SIZE(serialCli) && serialCli[port].cli_uart != NULL )
+    }
+    else if ((unsigned)port < ARRAY_SIZE(serialCli) && serialCli[port].cli_uart != NULL)
+    {
 		debug_port = serialCli[port].cli_uart;
-	else
+    }
+    else
+    {
 		debugPortAssigned = false;
+    }
 
 	return debugPortAssigned;
 }

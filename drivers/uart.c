@@ -210,9 +210,8 @@ serial_port_st * uartOpen( serial_port_t port, uint32_t baudrate, serial_modes_t
 	    }
 
 	    USART_Cmd(uart_config->usart, ENABLE);
-        uart_config->usart->DR = 'A';
 		serialPort = &pctx->serialPort;
-	}
+    }
 
 done:
     return serialPort;
@@ -261,7 +260,6 @@ static int uartWriteCharBlockingWithTimeout(void * const pv, uint8_t const ch, u
 	int result = -1;
 	int timed_out = 0;
 
-    GPIO_ToggleBits(GPIOD, GPIO_Pin_12);
     /* wait until the TX buffer can accept at least one more character */
 	while (((pctx->txBufferHead + 1) % pctx->txBufferSize) == pctx->txBufferTail)
 	{
@@ -275,11 +273,8 @@ static int uartWriteCharBlockingWithTimeout(void * const pv, uint8_t const ch, u
 	}
 	if ( timed_out == 0 )
 	{
-	    pctx->txBuffer[pctx->txBufferHead] = ch;
-	    pctx->txBufferHead = (pctx->txBufferHead + 1) % pctx->txBufferSize;
+        uartWriteChar(pctx, ch);
 
-        GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
-        USART_ITConfig(pctx->uartConfig->usart, USART_IT_TXE, ENABLE);
 	    result = 0;
 	}
 	else
