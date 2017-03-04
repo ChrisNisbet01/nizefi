@@ -30,16 +30,12 @@
 #include "serial_task.h"
 
 /*---------------------------- Symbol Define -------------------------------*/
-#define STACK_SIZE_TASKA 1024              /*!< Define "taskA" task size */
-#define STACK_SIZE_TASKB 1024              /*!< Define "taskB" task size */
 #define STACK_SIZE_TASKC 1024              /*!< Define "taskC" task size */
 #define STACK_SIZE_TASKD 1024              /*!< Define "taskD" task size */
 
 /* Private typedef -----------------------------------------------------------*/
 GPIO_InitTypeDef GPIO_InitStructure;
 /*---------------------------- Variable Define -------------------------------*/
-static __attribute((aligned(8))) OS_STK taskA_stk[STACK_SIZE_TASKA]; /*!< Define "taskA" task stack */
-static __attribute((aligned(8))) OS_STK taskB_stk[STACK_SIZE_TASKB]; /*!< Define "taskB" task stack */
 static __attribute((aligned(8))) OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define "taskC" task stack */
 static __attribute((aligned(8))) OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
 
@@ -81,28 +77,9 @@ void taskC(void* pdata)
     common_thread_task("C", NULL, GPIO_Pin_12, CFG_SYSTICK_FREQ / 4);
 }
 
-OS_FlagID periodicTasksTimerFlag;
-
-static void debugTimer(void)
-{
-    GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
-    isr_SetFlag(periodicTasksTimerFlag);
-}
-
-OS_FlagID periodicTasksTimerFlag;
-OS_FlagID periodicTasksTimerFlag2; 
-
 void taskD(void * pdata)
 {
     OS_TCID debugTimerID;
-
-    periodicTasksTimerFlag = CoCreateFlag(Co_TRUE, Co_FALSE); 
-    //periodicTasksTimerFlag2 = CoCreateFlag(Co_TRUE, Co_FALSE); 
-
-    printf("creating timer in taskd\r\n");
-    debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ/3, CFG_SYSTICK_FREQ/3, debugTimer);
-    printf("created timer %d\r\n", debugTimerID);
-    CoStartTmr( debugTimerID );
 
     (void)pdata;
     common_thread_task("D", "1", GPIO_Pin_13, CFG_SYSTICK_FREQ);
@@ -126,14 +103,13 @@ int main(void)
     CoInitOS(); /*!< Initialise CoOS */
 
     /*!< Create three tasks	*/
-    //printf("CoOS RTOS: Creating tasks\n");
     CoCreateTask(taskC, 0, 1, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
     CoCreateTask(taskD, 0, 2, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
 
     initSerialTask();
     setDebugPort(0);
 
-    //printf("CoOS RTOS: Starting scheduler\n");
+    printf("CoOS RTOS: Starting scheduler\n");
     CoStartOS(); /*!< Start multitask	           */
 
     //printf("CoOS RTOS: Scheduler stopped\n");

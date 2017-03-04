@@ -17,7 +17,6 @@ typedef struct serialCli_st
 	serial_port_st *cli_uart;
 } serialCli_st;
 
-static OS_STK cli_task_stack[CLI_TASK_STACK_SIZE];
 static OS_TID serialTaskID;
 
 static const serial_port_t serial_ports[] =
@@ -31,8 +30,12 @@ static const serial_port_t serial_ports[] =
 static serialCli_st serialCli[ARRAY_SIZE(serial_ports)];
 
 serial_port_st *debug_port;
-static OS_FlagID periodicTasksTimerFlag;
-static OS_FlagID cliUartFlag;
+static struct cli_context_st
+{
+    OS_FlagID periodicTasksTimerFlag;
+    OS_FlagID cliUartFlag;
+    OS_STK cli_task_stack[CLI_TASK_STACK_SIZE];
+} cli_context;
 
 int uartPutChar( void * port, int ch )
 {
@@ -53,23 +56,16 @@ void debug_put_char(char ch)
 
 static void debugTimer( void )
 {
-    GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
-    isr_SetFlag( periodicTasksTimerFlag );
-}
-
-static void debugTimer2(void)
-{
-    GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
+    isr_SetFlag(cli_context.periodicTasksTimerFlag);
 }
 
 static void newUartData( void *pv )
 {
 	UNUSED(pv);
 
-    GPIO_ToggleBits(GPIOD, GPIO_Pin_13);
     CoEnterISR();
 
-	isr_SetFlag(cliUartFlag);
+    isr_SetFlag(cli_context.cliUartFlag);
 
 	CoExitISR();
 }
@@ -102,41 +98,36 @@ static void doDebugOutput( void )
 {
 }
 
-static void doPeriodicTasks( void )
+static void doPeriodicSerialTasks( void )
 {
 	doDebugOutput();
 }
 
-static void cli_task( void *pv )
+static void cli_task(void * pv)
 {
-	OS_TCID debugTimerID;
+    OS_TCID debugTimerID;
 
-	UNUSED(pv);
+    UNUSED(pv);
 
-    printf("creating timer\r\n");
-    //debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer);
-    //printf("created timer %d\r\n", debugTimerID);
-    //CoStartTmr( debugTimerID );
+    debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer);
+    CoStartTmr(debugTimerID);
 
-	while (1)
-	{
-		StatusType err;
-        U32 readyFlags = (1 << cliUartFlag);
+    while (1)
+    {
+        StatusType err;
+        U32 readyFlags = (1 << cli_context.cliUartFlag);
 
-        GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
-            
-            //readyFlags = CoWaitForMultipleFlags((1 << periodicTasksTimerFlag) | (1 << cliUartFlag), OPT_WAIT_ANY, 0, &err);
-            readyFlags = CoWaitForMultipleFlags((1 << cliUartFlag), OPT_WAIT_ANY, 0, &err);
-            if ((readyFlags & (1 << cliUartFlag)))
-            {
-                handleNewSerialData();
-            }
-
-            if ((readyFlags & (1 << periodicTasksTimerFlag)))
-            {
-                doPeriodicTasks();
-            }
+        readyFlags = CoWaitForMultipleFlags((1 << cli_context.periodicTasksTimerFlag) | (1 << cli_context.cliUartFlag), OPT_WAIT_ANY, 0, &err);
+        if ((readyFlags & (1 << cli_context.cliUartFlag)))
+        {
+            handleNewSerialData();
         }
+
+        if ((readyFlags & (1 << cli_context.periodicTasksTimerFlag)))
+        {
+            doPeriodicSerialTasks();
+        }
+    }
 }
 
 bool setDebugPort( int port )
@@ -164,19 +155,14 @@ void initSerialTask( void )
 {
 	unsigned int cli_index;
 
-    periodicTasksTimerFlag = CoCreateFlag(Co_TRUE, Co_FALSE);
-    cliUartFlag = CoCreateFlag(Co_TRUE, Co_FALSE);
+    cli_context.periodicTasksTimerFlag = CoCreateFlag(Co_TRUE, Co_FALSE);
+    cli_context.cliUartFlag = CoCreateFlag(Co_TRUE, Co_FALSE);
 
 	for ( cli_index = 0 ; cli_index < ARRAY_SIZE(serial_ports); cli_index++ )
 	{
 		serialCli[cli_index].cli_uart = serialOpen( serial_ports[cli_index], 115200, uart_mode_rx | uart_mode_tx, newUartData );
 	}
-    setDebugPort(0); 
+    setDebugPort(0); /* Temp debug assign the debug port right now until we have a CLI command that allows it to be turned on/off. */
 
-    printf("usart flag %d", cliUartFlag);
-
-    //printf("p flag %d\r\n", periodicTasksTimerFlag); 
-
-    serialTaskID = CoCreateTask(cli_task, Co_NULL, SERIAL_TASK_PRIORITY, &cli_task_stack[CLI_TASK_STACK_SIZE - 1], CLI_TASK_STACK_SIZE);
-    printf("serial task id %d\r\n", serialTaskID);
+    serialTaskID = CoCreateTask(cli_task, Co_NULL, SERIAL_TASK_PRIORITY, &cli_context.cli_task_stack[CLI_TASK_STACK_SIZE - 1], CLI_TASK_STACK_SIZE);
 }

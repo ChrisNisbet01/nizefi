@@ -268,8 +268,8 @@ static int uartWriteCharBlockingWithTimeout(void * const pv, uint8_t const ch, u
 			timed_out = 1;
 			break;
 		}
-		CoTimeDelay( 0, 0, 0, 10 );
-		millisecs_counter += 10;
+		CoTimeDelay( 0, 0, 0, MSPERTICK);
+        millisecs_counter += MSPERTICK;
 	}
 	if ( timed_out == 0 )
 	{

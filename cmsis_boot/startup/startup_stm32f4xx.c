@@ -21,9 +21,10 @@
     
 
 /*----------Stack Configuration-----------------------------------------------*/
-#define STACK_SIZE       0x00001000    /*!< Stack size (in Words => 4 kBytes) */
-__attribute__ ((section(".co_stack")))
-unsigned long pulStack[STACK_SIZE];
+#define STACK_SIZE 1024    /*!< Stack size (in Words => 4 kBytes) */
+
+static __attribute__ ((section(".co_stack")))
+    unsigned long pulStack[STACK_SIZE];
 
 
 /*----------Macro definition--------------------------------------------------*/
