@@ -44,10 +44,7 @@ static void common_thread_task(char const * const task_name,
                                unsigned int gpio_pin, 
                                unsigned int const delay_ticks)
 {
-    float f = M_PI;
-
-    printf("CoOS task %s: started %3f pi %f\r\n", task_name, 1.2, f);
-    printf("CoOS task %s: started x %d, %3f pi %f\r\n", task_name, 1, 1.2, f);
+    printf("CoOS task %s started\r\n", task_name);
     while (1)
     {
         GPIO_ToggleBits(GPIOD, gpio_pin); 
@@ -69,11 +66,8 @@ void taskD(void * pdata)
     common_thread_task("D", GPIO_Pin_13, CFG_SYSTICK_FREQ);
 }
 
-
-int main(void)
+static void init_leds(void)
 {
-    SystemInit();
-
     /* GPIOD Periph clock enable */
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
     /* Configure PD12, PD13, PD14 and PD15 in output push-pull mode */
@@ -83,6 +77,13 @@ int main(void)
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
     GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
     GPIO_Init(GPIOD, &GPIO_InitStructure);
+}
+
+int main(void)
+{
+    SystemInit();
+
+    init_leds();
 
     CoInitOS(); /*!< Initialise CoOS */
 
@@ -91,14 +92,8 @@ int main(void)
     CoCreateTask(taskD, 0, 2, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
 
     initSerialTask();
-    setDebugPort(0);
 
-    printf("CoOS RTOS: Starting scheduler\n");
-    {
-        float f = 4.4;
-        printf("%s: %3f pi %f\r\n", "blah", 1.2, f);
-        printf("%s: x %d, %3f pi %f\r\n", "blah", 1, 1.2, f);
-    }
+    printf("CoOS RTOS: Starting scheduler\r\n");
 
     CoStartOS(); /*!< Start multitask	           */
 

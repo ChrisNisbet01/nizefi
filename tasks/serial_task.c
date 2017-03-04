@@ -54,6 +54,19 @@ void debug_put_char(char ch)
     }
 }
 
+int debug_put_block(void * data, size_t len)
+{
+    size_t x;
+    char * pch;
+
+    for (x = 0, pch = data; x < len; x++, pch++)
+    {
+        debug_put_char(*pch);
+    }
+    return len;
+}
+
+
 static void debugTimer( void )
 {
     isr_SetFlag(cli_context.periodicTasksTimerFlag);

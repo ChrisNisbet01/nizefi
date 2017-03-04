@@ -117,12 +117,12 @@ LDFLAGS = $(CPU_FLAGS) \
           -T$(LINK_SCRIPT)
 
 # now specify source files
-COMMON_SRC = $(SRC_DIR)/stdio/*.c \
-			 $(SRC_DIR)/main.c \
-			 $(SRC_DIR)/drivers/serial.c \
-			 $(SRC_DIR)/drivers/uart.c \
-			 $(SRC_DIR)/drivers/usart.c \
-			 $(SRC_DIR)/tasks/*.c
+COMMON_SRC = \
+	$(SRC_DIR)/main.c \
+	$(SRC_DIR)/drivers/serial.c \
+	$(SRC_DIR)/drivers/uart.c \
+	$(SRC_DIR)/drivers/usart.c \
+	$(SRC_DIR)/tasks/*.c
 
 COOS_SRC = $(COOS_DIR)/kernel/*.c \
            $(COOS_DIR)/portable/*.c

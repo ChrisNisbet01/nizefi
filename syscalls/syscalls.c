@@ -4,6 +4,7 @@
  ********************************************************************************/
 
 #include <stdio.h>
+#include <stddef.h>
 #include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -59,7 +60,10 @@ int _read(int file, char *ptr, int len)
 
 int _write(int file, char *ptr, int len)
 {
-  return len;
+    int debug_put_block(void * data, size_t len);
+
+    len = debug_put_block(ptr, len);
+    return len;
 }
 
 void abort(void)

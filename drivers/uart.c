@@ -261,16 +261,21 @@ static int uartWriteCharBlockingWithTimeout(void * const pv, uint8_t const ch, u
 	int timed_out = 0;
 
     /* wait until the TX buffer can accept at least one more character */
-	while (((pctx->txBufferHead + 1) % pctx->txBufferSize) == pctx->txBufferTail)
+    IRQ_DISABLE_SAVE();
+    while (timed_out == 0 && ((pctx->txBufferHead + 1) % pctx->txBufferSize) == pctx->txBufferTail)
 	{
 		if (millisecs_counter >= max_millisecs_to_wait)
 		{
 			timed_out = 1;
-			break;
 		}
-		CoTimeDelay( 0, 0, 0, MSPERTICK);
-        millisecs_counter += MSPERTICK;
-	}
+        else
+        {
+            IRQ_ENABLE_RESTORE();
+            CoTimeDelay(0, 0, 0, MSPERTICK);
+            millisecs_counter += MSPERTICK;
+            IRQ_DISABLE_SAVE();
+        }
+    }
 	if ( timed_out == 0 )
 	{
         uartWriteChar(pctx, ch);
@@ -282,6 +287,8 @@ static int uartWriteCharBlockingWithTimeout(void * const pv, uint8_t const ch, u
 		serial_uart_statistics.txTimeout++;
 		result = -1;
 	}
+    IRQ_ENABLE_RESTORE(); 
+
 
 	return result;
 }
