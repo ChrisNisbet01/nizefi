@@ -189,6 +189,77 @@ signed int PutSignedInt(
     return num;
 }
 
+// reverses a string 'str' of length 'len'
+void reverse(char *str, int len)
+{
+    int i=0, j=len-1, temp;
+    while (i<j)
+    {
+        temp = str[i];
+        str[i] = str[j];
+        str[j] = temp;
+        i++; j--;
+    }
+}
+ 
+ // Converts a given integer x to string str[].  d is the number
+ // of digits required in output. If d is more than the number
+ // of digits in x, then 0s are added at the beginning.
+int intToStr(int x, char str[], int d)
+{
+    int i = 0;
+    while (x)
+    {
+        str[i++] = (x%10) + '0';
+        x = x/10;
+    }
+ 
+    // If number of digits required is more, then
+    // add 0s at the beginning
+    while (i < d)
+        str[i++] = '0';
+ 
+    reverse(str, i);
+    str[i] = '\0';
+    return i;
+}
+ 
+// Converts a floating point number to string.
+int ftoa(float n, char *res, int afterpoint)
+{
+    // Extract integer part
+    int ipart = (int)n;
+ 
+    // Extract floating part
+    float fpart = n - (float)ipart;
+ 
+    // convert integer part to string
+    int i = intToStr(ipart, res, 0);
+ 
+    // check for display option after point
+    if (afterpoint != 0)
+    {
+        res[i] = '.';  // add dot
+        i++;
+        // Get the value of fraction part upto given no.
+        // of points after dot. The third parameter is needed
+        // to handle cases like 233.007
+        fpart = fpart * pow(10, afterpoint);
+ 
+        i += intToStr((int)fpart, res + i, afterpoint);
+    }
+
+    return i;
+}
+
+signed int PutFloat(
+    char * pStr,
+    char fill,
+    signed int width,
+    float value)
+{
+    return ftoa(value, pStr, 5);
+}
 
 /**
  * @brief  Writes an hexadecimal value into a string, using the given fill, width &
@@ -334,6 +405,18 @@ signed int vsnprintf(char *pStr, size_t length, const char *pFormat, va_list ap)
             case 's':
                 num = PutString(pStr, va_arg(ap, char *)); break;
             case 'c': num = PutChar(pStr, va_arg(ap, unsigned int)); break;
+            case 'f':
+            {
+                union
+                {
+                    uint32_t i[2];
+                    double f;
+                } u;
+                u.i[0] = va_arg(ap, uint32_t);
+                u.i[1] = va_arg(ap, uint32_t);
+                num = PutFloat(pStr, 0, width, u.f); break;
+            }
+                break;
             default:
                 return EOF;
             }

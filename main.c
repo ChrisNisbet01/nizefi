@@ -26,6 +26,7 @@
 #include "stm32f4xx_gpio.h"
 #include "stm32f4xx_rcc.h"
 #include "usart.h"
+#include <math.h>
 
 #include "serial_task.h"
 
@@ -44,7 +45,10 @@ static void common_thread_task(char const * const task_name,
                                unsigned int gpio_pin, 
                                unsigned int const delay_ticks)
 {
-    printf("CoOS task %s: started\r\n", task_name);
+    float f = M_PI;
+
+    printf("CoOS task %s: started %3f pi %f\r\n", task_name, 1.2, f);
+    printf("CoOS task %s: started x %d, %3f pi %f\r\n", task_name, 1, 1.2, f);
     while (1)
     {
         if (msg != NULL)
