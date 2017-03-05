@@ -123,7 +123,8 @@ void show_sysclock_info(uint32_t val)
 
 static void doDebugOutput(uint32_t val)
 {
-    show_sysclock_info(val);
+
+    //show_sysclock_info(val);
 }
 
 static void doPeriodicSerialTasks(uint32_t val)

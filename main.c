@@ -193,26 +193,22 @@ void hi_res_tick(void)
     GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
 }
 
-uint16_t _pulse_width_us, _period_us;
+uint16_t _pulse_width_us; 
+uint16_t _period_us;
 volatile uint32_t _pulses;
 volatile bool _pulse_set;
-volatile int num_pulses;
-volatile int num_sets; 
 
 void TIM5_IRQHandler(void)
 {
     if (TIM_GetITStatus(TIM5, TIM_IT_CC1) != RESET)
     {
         TIM_ClearITPendingBit(TIM5, TIM_IT_CC1);
-
         if (_pulse_set)
         {
             _pulse_set = false;
             GPIO_ResetBits(GPIOD, GPIO_Pin_14);
 
-            num_pulses++;
-
-            if (_pulses)
+            if (_pulses > 0)
             {
                 _pulses--;
             }
@@ -228,9 +224,9 @@ void TIM5_IRQHandler(void)
         else
         {
             _pulse_set = true;
+            TIM_SetCompare1(TIM5, TIM_GetCounter(TIM5) + _pulse_width_us);
+
             GPIO_SetBits(GPIOD, GPIO_Pin_14);
-            TIM_SetCompare1(TIM5, (uint16_t)(TIM_GetCounter(TIM5) + _pulse_width_us));
-            num_sets++;
         }
     }
 }
@@ -241,9 +237,8 @@ void pulse_start(uint32_t pulses, uint16_t pulse_us, uint16_t period_us)
     _period_us = period_us - pulse_us;
     _pulses = pulses;
     _pulse_set = false;
-    num_pulses = 0;
-    num_sets = 0;
 
+    TIM_ClearITPendingBit(TIM5, TIM_IT_CC1);
     TIM_ITConfig(TIM5, TIM_IT_CC1, ENABLE);
     TIM_GenerateEvent(TIM5, TIM_EventSource_CC1);
 }
@@ -255,10 +250,9 @@ void taskC(void * pdata)
     {
         if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0))
         {
-            pulse_start(1, 1000, 4000);
+            pulse_start(3, 1000, 4000);
         }
         CoTickDelay(CFG_SYSTICK_FREQ / 4);
-
     }
 }
 
@@ -269,9 +263,7 @@ void taskD(void * pdata)
     while (true)
     {
         CoTickDelay(CFG_SYSTICK_FREQ);
-        printf("num pulses %d sets %d\r\n", num_pulses, num_sets);
     }
-
 }
 
 
