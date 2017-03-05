@@ -6,6 +6,7 @@
 #include <math.h>
 #include <coocox.h>
 #include <serial.h>
+#include "hi_res_timer.h"
 
 #include <stm32f4xx_gpio.h>
 
@@ -66,9 +67,11 @@ int debug_put_block(void * data, size_t len)
     return len;
 }
 
+uint32_t new_time;
 
 static void debugTimer( void )
 {
+    new_time = SysTick->VAL;
     isr_SetFlag(cli_context.periodicTasksTimerFlag);
 }
 
@@ -107,13 +110,25 @@ static void handleNewSerialData( void )
 	}
 }
 
-static void doDebugOutput( void )
+void show_sysclock_info(uint32_t val)
 {
+    RCC_ClocksTypeDef clocks;
+
+    RCC_GetClocksFreq(&clocks);
+    printf("clock rate count %"PRIu32"\r\n", val);
+    printf("new_time         %"PRIu32"\r\n", new_time);
+    printf("hi_res_counter_val %"PRIu32"\r\n", hi_res_counter_val());
+    printf("pclk1 %"PRIu32"\r\n", clocks.PCLK1_Frequency);
 }
 
-static void doPeriodicSerialTasks( void )
+static void doDebugOutput(uint32_t val)
 {
-	doDebugOutput();
+    show_sysclock_info(val);
+}
+
+static void doPeriodicSerialTasks(uint32_t val)
+{
+	doDebugOutput(val);
 }
 
 static void cli_task(void * pv)
@@ -138,7 +153,7 @@ static void cli_task(void * pv)
 
         if ((readyFlags & (1 << cli_context.periodicTasksTimerFlag)))
         {
-            doPeriodicSerialTasks();
+            doPeriodicSerialTasks(SysTick->VAL);
         }
     }
 }

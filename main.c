@@ -30,6 +30,7 @@
 #include "usart.h"
 #include <math.h>
 
+#include "hi_res_timer.h"
 #include "serial_task.h"
 
 /*---------------------------- Symbol Define -------------------------------*/
@@ -197,11 +198,18 @@ static void init_leds(void)
     GPIO_Init(GPIOD, &GPIO_InitStructure);
 }
 
+void hi_res_tick(void)
+{
+    GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
+}
+
 int main(void)
 {
     SystemInit();
 
     init_leds();
+    initHiResTimer(1000000, hi_res_tick);
+
     init_button();
     init_crank_signal();
 

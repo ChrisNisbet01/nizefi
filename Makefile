@@ -47,12 +47,13 @@ COMMON_CFLAGS = -ffunction-sections \
 OPTIMISE_FLAGS = -O2
 
 
-INCLUDE_DIRS = 	$(SRC_DIR)/stdio \
-				$(SRC_DIR)/drivers \
-				$(SRC_DIR)/tasks \
-				$(COOS_DIR) \
-				$(COOS_DIR)/portable \
-				$(COOS_DIR)/kernel
+INCLUDE_DIRS = \
+			$(SRC_DIR)/drivers \
+			$(SRC_DIR)/timers \
+			$(SRC_DIR)/tasks \
+			$(COOS_DIR) \
+			$(COOS_DIR)/portable \
+			$(COOS_DIR)/kernel
 
 ifeq ($(TARGET),STM32F4_DISC1)
 
@@ -119,6 +120,7 @@ LDFLAGS = $(CPU_FLAGS) \
 # now specify source files
 COMMON_SRC = \
 	$(SRC_DIR)/main.c \
+	$(SRC_DIR)/timers/*.c \
 	$(SRC_DIR)/drivers/serial.c \
 	$(SRC_DIR)/drivers/uart.c \
 	$(SRC_DIR)/drivers/usart.c \
