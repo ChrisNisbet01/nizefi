@@ -217,7 +217,6 @@ OS_TCID CoCreateTmr(U8 tmrType, U32 tmrCnt, U32 tmrReload, vFUNCPtr func)
             TmrTbl[i].tmrPrev   = Co_NULL;
             TmrTbl[i].tmrNext   = Co_NULL;
             OsSchedUnlock();              /* Unlock schedule                  */
-            GPIO_SetBits(GPIOD, GPIO_Pin_12);
             return i;                     /* Return timer ID                  */
         }
     }
