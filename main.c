@@ -179,18 +179,24 @@ static void init_leds(void)
 {
     /* GPIOD Periph clock enable */
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
-    /* Configure PD12, PD13, PD14 and PD15 in output push-pull mode */
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14  | GPIO_Pin_15;
+
+    /* Configure PD13, PD14 and PD15 in output push-pull mode */
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13 | GPIO_Pin_14  | GPIO_Pin_15;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
     GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
     GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
     GPIO_Init(GPIOD, &GPIO_InitStructure);
-}
 
-void hi_res_tick(void)
-{
-    GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
+    GPIO_PinAFConfig(GPIOD, GPIO_PinSource12, GPIO_AF_TIM4);
+
+    /* Configure PD12 to be connected to TIM4 */
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    GPIO_Init(GPIOD, &GPIO_InitStructure);
 }
 
 uint16_t _pulse_width_us; 
@@ -198,11 +204,13 @@ uint16_t _period_us;
 volatile uint32_t _pulses;
 volatile bool _pulse_set;
 
-void TIM5_IRQHandler(void)
+void TIM4_IRQHandler(void)
 {
-    if (TIM_GetITStatus(TIM5, TIM_IT_CC1) != RESET)
+    TIM_TypeDef * TIMx = TIM4;
+
+    if (TIM_GetITStatus(TIMx, TIM_IT_CC1) != RESET)
     {
-        TIM_ClearITPendingBit(TIM5, TIM_IT_CC1);
+        TIM_ClearITPendingBit(TIMx, TIM_IT_CC1);
         if (_pulse_set)
         {
             _pulse_set = false;
@@ -214,33 +222,51 @@ void TIM5_IRQHandler(void)
             }
             if (_pulses == 0)
             {
-                TIM_ITConfig(TIM5, TIM_IT_CC1, DISABLE);
+                TIM_ITConfig(TIMx, TIM_IT_CC1, DISABLE);
             }
             else
             {
-                TIM_SetCompare1(TIM5, (uint16_t)(TIM_GetCounter(TIM5) + _period_us));
+                TIM_SetCompare1(TIMx, (uint16_t)(TIM_GetCounter(TIMx) + _period_us));
             }
         }
         else
         {
             _pulse_set = true;
-            TIM_SetCompare1(TIM5, TIM_GetCounter(TIM5) + _pulse_width_us);
+            TIM_SetCompare1(TIMx, TIM_GetCounter(TIMx) + _pulse_width_us);
 
             GPIO_SetBits(GPIOD, GPIO_Pin_14);
         }
     }
 }
 
+void timer_ccr_init(TIM_TypeDef * TIMx)
+{
+  TIM_OCInitTypeDef  TIM_OCInitStructure;
+
+  /* always initialise local variables before use */
+  TIM_OCStructInit (&TIM_OCInitStructure);
+
+  /* just use basic Output Compare Mode*/
+  TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_Toggle;
+  TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
+  TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_Low;
+
+  TIM_OC1Init(TIMx, &TIM_OCInitStructure);
+  TIM_OC1PreloadConfig(TIMx, TIM_OCPreload_Disable);
+}
+
 void pulse_start(uint32_t pulses, uint16_t pulse_us, uint16_t period_us)
 {
+    TIM_TypeDef * TIMx = TIM4;
+
     _pulse_width_us = pulse_us;
     _period_us = period_us - pulse_us;
     _pulses = pulses;
     _pulse_set = false;
 
-    TIM_ClearITPendingBit(TIM5, TIM_IT_CC1);
-    TIM_ITConfig(TIM5, TIM_IT_CC1, ENABLE);
-    TIM_GenerateEvent(TIM5, TIM_EventSource_CC1);
+    TIM_ClearITPendingBit(TIMx, TIM_IT_CC1);
+    TIM_ITConfig(TIMx, TIM_IT_CC1, ENABLE);
+    TIM_GenerateEvent(TIMx, TIM_EventSource_CC1);
 }
  
 void taskC(void * pdata)
@@ -266,43 +292,52 @@ void taskD(void * pdata)
     }
 }
 
+void hi_res_tick(void)
+{
+    GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
+}
 
  
 void pulse_cfg(void)
 {
+    TIM_TypeDef * TIMx = TIM4; 
     TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
     NVIC_InitTypeDef NVIC_InitStructure;
 
-    /* TIM5 clock enable */
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM5, ENABLE);
+    /* TIM4 clock enable */
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM4, ENABLE);
 
     /* Time base configuration */
     TIM_TimeBaseStructure.TIM_Period = 65535;
     TIM_TimeBaseStructure.TIM_Prescaler = (84000000 / 5000) - 1; //84 - 1; //Prescale clock to generate 1MHz
     TIM_TimeBaseStructure.TIM_ClockDivision = 0;
     TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
-    TIM_TimeBaseInit(TIM5, &TIM_TimeBaseStructure);
+    TIM_TimeBaseInit(TIMx, &TIM_TimeBaseStructure);
 
-    /* Enable TIM5 Interrupt */
-    NVIC_InitStructure.NVIC_IRQChannel = TIM5_IRQn;
+    /* Enable TIM4 Interrupt */
+    NVIC_InitStructure.NVIC_IRQChannel = TIM4_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 4;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
 
-    TIM_ITConfig(TIM5, TIM_IT_CC1, DISABLE);
-    /* TIM5 enable counter */
-    TIM_Cmd(TIM5, ENABLE);
+    TIM_ITConfig(TIMx, TIM_IT_CC1, DISABLE);
+    /* TIM4 enable counter */
+    TIM_Cmd(TIMx, ENABLE);
+
+    timer_ccr_init(TIMx); 
+
+
 }
 
 void init_pulses(void)
 {
-  /* Initialise system */
+    /* Initialise system */
 
-  RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
 
-  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4); //4 bits for pre-emption priority 0 bits for subpriority
-  pulse_cfg();
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4); //4 bits for pre-emption priority 0 bits for subpriority
+    pulse_cfg();
 }
 
 
