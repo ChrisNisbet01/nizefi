@@ -48,6 +48,7 @@ OPTIMISE_FLAGS = -O2
 
 
 INCLUDE_DIRS = \
+			$(SRC_DIR) \
 			$(SRC_DIR)/drivers \
 			$(SRC_DIR)/timers \
 			$(SRC_DIR)/tasks \
