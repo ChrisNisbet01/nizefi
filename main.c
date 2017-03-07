@@ -199,10 +199,73 @@ static void init_leds(void)
     GPIO_Init(GPIOD, &GPIO_InitStructure);
 }
 
-uint16_t _pulse_width_us; 
-uint16_t _period_us;
-volatile uint32_t _pulses;
-volatile bool _pulse_set;
+typedef struct timed_event_context_st timed_event_context_st;
+typedef void(* state_handler)(timed_event_context_st * context);
+
+struct timed_event_context_st
+{
+    volatile uint16_t initial_delay_us;
+    volatile uint16_t pulses;
+    uint16_t active_us;
+    uint16_t inactive_us;
+    state_handler handler;
+    TIM_TypeDef * TIMx;
+};
+
+static void timed_event_init_handler(timed_event_context_st * context);
+static void timed_event_initial_delay_handler(timed_event_context_st * context);
+static void timed_event_active_handler(timed_event_context_st * context);
+static void timed_event_inactive_handler(timed_event_context_st * context);
+
+static void timed_event_init_handler(timed_event_context_st * context)
+{
+    TIM_SetCompare1(context->TIMx, (uint16_t)(TIM_GetCounter(context->TIMx) + context->initial_delay_us));
+
+    context->handler = timed_event_initial_delay_handler;
+}
+
+static void timed_event_initial_delay_handler(timed_event_context_st * context)
+{
+    TIM_SetCompare1(context->TIMx, (uint16_t)(TIM_GetCapture1(context->TIMx) + context->active_us));
+
+    GPIO_SetBits(GPIOD, GPIO_Pin_14);
+
+    context->handler = timed_event_active_handler;
+}
+
+static void timed_event_active_handler(timed_event_context_st * context)
+{
+    GPIO_ResetBits(GPIOD, GPIO_Pin_14);
+    if (context->pulses > 0)
+    {
+        context->pulses--;
+    }
+    if (context->pulses > 0)
+    {
+        TIM_SetCompare1(context->TIMx, (uint16_t)(TIM_GetCapture1(context->TIMx) + context->inactive_us));
+        context->handler = timed_event_inactive_handler;
+    }
+    else
+    {
+        TIM_ITConfig(context->TIMx, TIM_IT_CC1, DISABLE);
+        context->handler = timed_event_init_handler;
+    }
+}
+
+static void timed_event_inactive_handler(timed_event_context_st * context)
+{
+    TIM_SetCompare1(context->TIMx, (uint16_t)(TIM_GetCapture1(context->TIMx) + context->active_us));
+
+    GPIO_SetBits(GPIOD, GPIO_Pin_14);
+    context->handler = timed_event_active_handler;
+}
+
+static timed_event_context_st timed_event_context;
+
+static void timed_event_callback()
+{
+    timed_event_context.handler(&timed_event_context);
+}
 
 void TIM4_IRQHandler(void)
 {
@@ -211,58 +274,20 @@ void TIM4_IRQHandler(void)
     if (TIM_GetITStatus(TIMx, TIM_IT_CC1) != RESET)
     {
         TIM_ClearITPendingBit(TIMx, TIM_IT_CC1);
-        if (_pulse_set)
-        {
-            _pulse_set = false;
-            GPIO_ResetBits(GPIOD, GPIO_Pin_14);
-
-            if (_pulses > 0)
-            {
-                _pulses--;
-            }
-            if (_pulses == 0)
-            {
-                TIM_ITConfig(TIMx, TIM_IT_CC1, DISABLE);
-            }
-            else
-            {
-                TIM_SetCompare1(TIMx, (uint16_t)(TIM_GetCounter(TIMx) + _period_us));
-            }
-        }
-        else
-        {
-            _pulse_set = true;
-            TIM_SetCompare1(TIMx, TIM_GetCounter(TIMx) + _pulse_width_us);
-
-            GPIO_SetBits(GPIOD, GPIO_Pin_14);
-        }
+        timed_event_callback();
     }
-}
-
-void timer_ccr_init(TIM_TypeDef * TIMx)
-{
-  TIM_OCInitTypeDef  TIM_OCInitStructure;
-
-  /* always initialise local variables before use */
-  TIM_OCStructInit (&TIM_OCInitStructure);
-
-  /* just use basic Output Compare Mode*/
-  TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_Toggle;
-  TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
-  TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_Low;
-
-  TIM_OC1Init(TIMx, &TIM_OCInitStructure);
-  TIM_OC1PreloadConfig(TIMx, TIM_OCPreload_Disable);
 }
 
 void pulse_start(uint32_t pulses, uint16_t pulse_us, uint16_t period_us)
 {
     TIM_TypeDef * TIMx = TIM4;
 
-    _pulse_width_us = pulse_us;
-    _period_us = period_us - pulse_us;
-    _pulses = pulses;
-    _pulse_set = false;
+    timed_event_context.handler = timed_event_init_handler;
+    timed_event_context.initial_delay_us = period_us;
+    timed_event_context.active_us = pulse_us;
+    timed_event_context.inactive_us = period_us - pulse_us;
+    timed_event_context.pulses = pulses;
+    timed_event_context.TIMx = TIMx;
 
     TIM_ClearITPendingBit(TIMx, TIM_IT_CC1);
     TIM_ITConfig(TIMx, TIM_IT_CC1, ENABLE);
@@ -276,7 +301,7 @@ void taskC(void * pdata)
     {
         if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0))
         {
-            pulse_start(3, 1000, 4000);
+            pulse_start(6, 1000, 10000);
         }
         CoTickDelay(CFG_SYSTICK_FREQ / 4);
     }
@@ -308,8 +333,9 @@ void pulse_cfg(void)
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM4, ENABLE);
 
     /* Time base configuration */
+    TIM_TimeBaseStructInit(&TIM_TimeBaseStructure);
     TIM_TimeBaseStructure.TIM_Period = 65535;
-    TIM_TimeBaseStructure.TIM_Prescaler = (84000000 / 5000) - 1; //84 - 1; //Prescale clock to generate 1MHz
+    TIM_TimeBaseStructure.TIM_Prescaler = (84000000 / 10000) - 1; //84 - 1; //Prescale clock to generate 1MHz
     TIM_TimeBaseStructure.TIM_ClockDivision = 0;
     TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
     TIM_TimeBaseInit(TIMx, &TIM_TimeBaseStructure);
@@ -322,11 +348,9 @@ void pulse_cfg(void)
     NVIC_Init(&NVIC_InitStructure);
 
     TIM_ITConfig(TIMx, TIM_IT_CC1, DISABLE);
-    /* TIM4 enable counter */
+
+    /* Enable the timer. */
     TIM_Cmd(TIMx, ENABLE);
-
-    timer_ccr_init(TIMx); 
-
 
 }
 
