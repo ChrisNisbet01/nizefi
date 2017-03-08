@@ -202,6 +202,12 @@ void pulser_task(void * pdata)
     }
 }
 
+static void configure_timed_event(timed_event_context_st * const context, GPIO_TypeDef * const gpio_port, uint_fast16_t const gpio_pin)
+{
+    context->gpio.port = gpio_port;
+    context->gpio.pin = gpio_pin;
+}
+
 void init_pulses(void)
 {
     size_t index;
@@ -215,8 +221,10 @@ void init_pulses(void)
         context->flag = CoCreateFlag(Co_TRUE, Co_FALSE);
 
         context->timer_context = timer_channel_get(timed_event_callback, context);
-        context->gpio.port = GPIOD;
-        context->gpio.pin = GPIO_Pin_12 << index;
+
+        /* Temp debug pulse the LEDS so I can see something happening. 
+         */
+        configure_timed_event(context, GPIOD, GPIO_Pin_12 << index);
     }
 }
 
