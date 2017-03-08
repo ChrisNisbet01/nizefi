@@ -8,6 +8,22 @@
 typedef void (* timed_event_handler)(void * arg);
 typedef struct timer_st timer_st; 
 
+typedef struct capture_compare_config_st
+{
+    uint32_t const capture_compare_interrupt;
+    uint32_t const capture_compare_event_source;
+    void (* TIM_SetCompare)(TIM_TypeDef * TIMx, uint32_t Compare);
+    uint32_t (* TIM_GetCapture)(TIM_TypeDef * TIMx); 
+} capture_compare_config_st;
+
+typedef enum capture_compare_index_t
+{
+    capture_1_index,
+    capture_2_index,
+    capture_3_index,
+    capture_4_index
+} capture_compare_index_t;
+
 struct timer_channel_context_st
 {
     volatile uint32_t * ccr;
@@ -17,15 +33,7 @@ struct timer_channel_context_st
 
     timer_st const * timer;
 
-    /* XXX - TODO. Move these into a const array with one entry for 
-     * each channel, and replace with a pointer to the appropriate 
-     * entry. 
-     */
-    uint32_t const capture_compare_interrupt;
-    uint32_t const capture_compare_event_source;
-    void (* TIM_SetCompare)(TIM_TypeDef * TIMx, uint32_t Compare);
-    uint32_t(*TIM_GetCapture)(TIM_TypeDef * TIMx);
-
+    capture_compare_config_st const * capture_config;
 
     bool free_after_event; /* Set if the user attempts to free the timer while it is still in use. */
 
@@ -53,115 +61,99 @@ struct timer_st
     timer_channel_context_st * channels;
 };
 
-static timer_channel_context_st tim1_timer_channel_contexts[] =
+static capture_compare_config_st capture_compare_configs[] =
 {
+    [capture_1_index] =
     {
         .capture_compare_interrupt = TIM_IT_CC1,
         .capture_compare_event_source = TIM_EventSource_CC1,
         .TIM_SetCompare = TIM_SetCompare1,
         .TIM_GetCapture = TIM_GetCapture1
     },
+    [capture_2_index] =
     {
         .capture_compare_interrupt = TIM_IT_CC2,
         .capture_compare_event_source = TIM_EventSource_CC2,
         .TIM_SetCompare = TIM_SetCompare2,
         .TIM_GetCapture = TIM_GetCapture2
     },
+    [capture_3_index] =
     {
         .capture_compare_interrupt = TIM_IT_CC3,
         .capture_compare_event_source = TIM_EventSource_CC3,
         .TIM_SetCompare = TIM_SetCompare3,
         .TIM_GetCapture = TIM_GetCapture3
     },
+    [capture_4_index] =
     {
         .capture_compare_interrupt = TIM_IT_CC4,
         .capture_compare_event_source = TIM_EventSource_CC4,
         .TIM_SetCompare = TIM_SetCompare4,
         .TIM_GetCapture = TIM_GetCapture4
+    }
+};
+
+static timer_channel_context_st tim1_timer_channel_contexts[] =
+{
+    {
+        .capture_config = &capture_compare_configs[capture_1_index]
+    },
+    {
+        .capture_config = &capture_compare_configs[capture_2_index]
+    },
+    {
+        .capture_config = &capture_compare_configs[capture_3_index]
+    },
+    {
+        .capture_config = &capture_compare_configs[capture_4_index]
     }
 };
 
 static timer_channel_context_st tim3_timer_channel_contexts[] =
 {
     {
-        .capture_compare_interrupt = TIM_IT_CC1,
-        .capture_compare_event_source = TIM_EventSource_CC1,
-        .TIM_SetCompare = TIM_SetCompare1,
-        .TIM_GetCapture = TIM_GetCapture1
+        .capture_config = &capture_compare_configs[capture_1_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC2,
-        .capture_compare_event_source = TIM_EventSource_CC2,
-        .TIM_SetCompare = TIM_SetCompare2,
-        .TIM_GetCapture = TIM_GetCapture2
+        .capture_config = &capture_compare_configs[capture_2_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC3,
-        .capture_compare_event_source = TIM_EventSource_CC3,
-        .TIM_SetCompare = TIM_SetCompare3,
-        .TIM_GetCapture = TIM_GetCapture3
+        .capture_config = &capture_compare_configs[capture_3_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC4,
-        .capture_compare_event_source = TIM_EventSource_CC4,
-        .TIM_SetCompare = TIM_SetCompare4,
-        .TIM_GetCapture = TIM_GetCapture4
+        .capture_config = &capture_compare_configs[capture_4_index]
     }
 };
 
 static timer_channel_context_st tim4_timer_channel_contexts[] =
 {
     {
-        .capture_compare_interrupt = TIM_IT_CC1,
-        .capture_compare_event_source = TIM_EventSource_CC1,
-        .TIM_SetCompare = TIM_SetCompare1,
-        .TIM_GetCapture = TIM_GetCapture1
+        .capture_config = &capture_compare_configs[capture_1_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC2,
-        .capture_compare_event_source = TIM_EventSource_CC2,
-        .TIM_SetCompare = TIM_SetCompare2,
-        .TIM_GetCapture = TIM_GetCapture2
+        .capture_config = &capture_compare_configs[capture_2_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC3,
-        .capture_compare_event_source = TIM_EventSource_CC3,
-        .TIM_SetCompare = TIM_SetCompare3,
-        .TIM_GetCapture = TIM_GetCapture3
+        .capture_config = &capture_compare_configs[capture_3_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC4,
-        .capture_compare_event_source = TIM_EventSource_CC4,
-        .TIM_SetCompare = TIM_SetCompare4,
-        .TIM_GetCapture = TIM_GetCapture4
+        .capture_config = &capture_compare_configs[capture_4_index]
     }
 };
 
 static timer_channel_context_st tim8_timer_channel_contexts[] =
 {
     {
-        .capture_compare_interrupt = TIM_IT_CC1,
-        .capture_compare_event_source = TIM_EventSource_CC1,
-        .TIM_SetCompare = TIM_SetCompare1,
-        .TIM_GetCapture = TIM_GetCapture1
+        .capture_config = &capture_compare_configs[capture_1_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC2,
-        .capture_compare_event_source = TIM_EventSource_CC2,
-        .TIM_SetCompare = TIM_SetCompare2,
-        .TIM_GetCapture = TIM_GetCapture2
+        .capture_config = &capture_compare_configs[capture_2_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC3,
-        .capture_compare_event_source = TIM_EventSource_CC3,
-        .TIM_SetCompare = TIM_SetCompare3,
-        .TIM_GetCapture = TIM_GetCapture3
+        .capture_config = &capture_compare_configs[capture_3_index]
     },
     {
-        .capture_compare_interrupt = TIM_IT_CC4,
-        .capture_compare_event_source = TIM_EventSource_CC4,
-        .TIM_SetCompare = TIM_SetCompare4,
-        .TIM_GetCapture = TIM_GetCapture4
+        .capture_config = &capture_compare_configs[capture_4_index]
     }
 };
 
@@ -298,6 +290,7 @@ void timed_events_init(uint32_t timer_frequency)
         for (channel_index = 0; channel_index < timer->num_channels; channel_index++)
         {
             timer_channel_context_st * const channel = &timer->channels[channel_index];
+            capture_compare_config_st const * const capture_config = channel->capture_config;
 
             channel->timer = timer;
             LIST_INSERT_HEAD(&timer_context.unused_timer_list, channel, entry);
@@ -305,7 +298,7 @@ void timed_events_init(uint32_t timer_frequency)
             /* Disable the channel interrupts before getting the timer up 
              * and running. 
              */
-            TIM_ITConfig(timer->TIM, channel->capture_compare_interrupt, DISABLE);
+            TIM_ITConfig(timer->TIM, capture_config->capture_compare_interrupt, DISABLE);
 
             timer_init(timer, timer_frequency);
         }
@@ -344,35 +337,38 @@ void timer_channel_free(timer_channel_context_st * const channel)
 
 void timer_channel_schedule_followup_event(timer_channel_context_st * const channel, uint32_t const delay_us)
 {
+    capture_compare_config_st const * const capture_config = channel->capture_config; 
     /* Assumes that the capture interrupt is still enabled. */
     TIM_TypeDef * const TIMx = channel->timer->TIM;
 
-    channel->TIM_SetCompare(TIMx, (uint16_t)(channel->TIM_GetCapture(TIMx) + delay_us));
+    capture_config->TIM_SetCompare(TIMx, (uint16_t)(capture_config->TIM_GetCapture(TIMx) + delay_us));
 }
 
 void timer_channel_schedule_new_event(timer_channel_context_st * const channel, uint32_t const delay_us)
 {
+    capture_compare_config_st const * const capture_config = channel->capture_config;
     TIM_TypeDef * const TIMx = channel->timer->TIM;
     uint32_t const cnt = TIM_GetCounter(TIMx);
 
-    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, DISABLE);
-    TIM_ClearITPendingBit(TIMx, channel->capture_compare_interrupt);
+    TIM_ITConfig(TIMx, capture_config->capture_compare_interrupt, DISABLE);
+    TIM_ClearITPendingBit(TIMx, capture_config->capture_compare_interrupt);
 
-    channel->TIM_SetCompare(TIMx, (uint16_t)(cnt + delay_us));
+    capture_config->TIM_SetCompare(TIMx, (uint16_t)(cnt + delay_us));
 
-    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, ENABLE);
+    TIM_ITConfig(TIMx, capture_config->capture_compare_interrupt, ENABLE);
 }
 
 void timer_channel_schedule_new_based_event(timer_channel_context_st * const channel, uint32_t const base, uint32_t const delay_us)
 {
+    capture_compare_config_st const * const capture_config = channel->capture_config;
     TIM_TypeDef * const TIMx = channel->timer->TIM;
 
-    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, DISABLE);
-    TIM_ClearITPendingBit(TIMx, channel->capture_compare_interrupt);
+    TIM_ITConfig(TIMx, capture_config->capture_compare_interrupt, DISABLE);
+    TIM_ClearITPendingBit(TIMx, capture_config->capture_compare_interrupt);
 
-    channel->TIM_SetCompare(TIMx, (uint16_t)(base + delay_us));
+    capture_config->TIM_SetCompare(TIMx, (uint16_t)(base + delay_us));
 
-    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, ENABLE);
+    TIM_ITConfig(TIMx, capture_config->capture_compare_interrupt, ENABLE);
 }
 
 uint32_t timer_channel_get_current_time(timer_channel_context_st * const channel)
@@ -384,16 +380,19 @@ uint32_t timer_channel_get_current_time(timer_channel_context_st * const channel
 
 void timer_channel_disable(timer_channel_context_st * const channel)
 {
+    capture_compare_config_st const * const capture_config = channel->capture_config;
     TIM_TypeDef * const TIMx = channel->timer->TIM;
 
-    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, DISABLE);
+    TIM_ITConfig(TIMx, capture_config->capture_compare_interrupt, DISABLE);
 }
 
 static void TIM_Handle_CC_IRQ(TIM_TypeDef * const TIMx, timer_channel_context_st * const channel)
 {
-    if (TIM_GetITStatus(TIMx, channel->capture_compare_interrupt) != RESET)
+    capture_compare_config_st const * const capture_config = channel->capture_config;
+
+    if (TIM_GetITStatus(TIMx, capture_config->capture_compare_interrupt) != RESET)
     {
-        TIM_ClearITPendingBit(TIMx, channel->capture_compare_interrupt);
+        TIM_ClearITPendingBit(TIMx, capture_config->capture_compare_interrupt);
         if (channel->handler != NULL)
         {
             /* It is left to the handler to stop the interrupts or 
