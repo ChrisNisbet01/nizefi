@@ -104,7 +104,8 @@ static void handleNewSerialData( void )
                 /* Just echo the char back for now. */
                 if (ch >= 0)
                 {
-                    uartPutChar(serialCli[uart_index].cli_uart, ch);
+                    //uartPutChar(serialCli[uart_index].cli_uart, ch);
+                    print_pulse_details(); 
                 }
 			}
 		}
@@ -126,7 +127,7 @@ static void doDebugOutput(uint32_t val)
 {
 
     //show_sysclock_info(val);
-    print_pulse_details();
+    //print_pulse_details();
 
 }
 

@@ -353,11 +353,24 @@ void timer_channel_schedule_followup_event(timer_channel_context_st * const chan
 void timer_channel_schedule_new_event(timer_channel_context_st * const channel, uint32_t const delay_us)
 {
     TIM_TypeDef * const TIMx = channel->timer->TIM;
+    uint32_t const cnt = TIM_GetCounter(TIMx);
 
     TIM_ITConfig(TIMx, channel->capture_compare_interrupt, DISABLE);
     TIM_ClearITPendingBit(TIMx, channel->capture_compare_interrupt);
 
-    channel->TIM_SetCompare(TIMx, (uint16_t)(TIM_GetCounter(TIMx) + delay_us));
+    channel->TIM_SetCompare(TIMx, (uint16_t)(cnt + delay_us));
+
+    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, ENABLE);
+}
+
+void timer_channel_schedule_new_based_event(timer_channel_context_st * const channel, uint32_t const base, uint32_t const delay_us)
+{
+    TIM_TypeDef * const TIMx = channel->timer->TIM;
+
+    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, DISABLE);
+    TIM_ClearITPendingBit(TIMx, channel->capture_compare_interrupt);
+
+    channel->TIM_SetCompare(TIMx, (uint16_t)(base + delay_us));
 
     TIM_ITConfig(TIMx, channel->capture_compare_interrupt, ENABLE);
 }

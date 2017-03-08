@@ -213,7 +213,7 @@ void taskC(void * pdata)
     {
         if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0))
         {
-            pulse_start(6, 5000, 10000);
+            pulse_start(6, 100, 10000);
         }
         CoTickDelay(CFG_SYSTICK_FREQ / 4);
     }
@@ -246,7 +246,7 @@ int main(void)
     init_button();
     init_crank_signal();
 
-    timed_events_init(10000);    
+    timed_events_init(1000000);    
     init_pulses();
 
     CoInitOS(); /*!< Initialise CoOS */
