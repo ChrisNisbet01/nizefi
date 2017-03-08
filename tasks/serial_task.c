@@ -12,7 +12,7 @@
 #include <stm32f4xx_gpio.h>
 
 #define CLI_TASK_STACK_SIZE 1024
-#define SERIAL_TASK_PRIORITY 3
+#define SERIAL_TASK_PRIORITY 4
 
 typedef struct serialCli_st
 {
@@ -105,7 +105,11 @@ static void handleNewSerialData( void )
                 if (ch >= 0)
                 {
                     //uartPutChar(serialCli[uart_index].cli_uart, ch);
-                    print_pulse_details(); 
+                    if (ch == 'r')
+                    {
+                        reset_pulse_details();
+                    }
+                    print_pulse_details();
                 }
 			}
 		}

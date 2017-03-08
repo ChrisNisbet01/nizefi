@@ -181,7 +181,7 @@ static timer_st const timers[] =
         .RCC_APBPeriphClockCmd = RCC_APB2PeriphClockCmd,
         .RCC_APBPeriph = RCC_APB2Periph_TIM1,
         .IRQ_channel = TIM1_CC_IRQn,
-        .num_channels = 1,
+        .num_channels = 4,
         .channels = tim1_timer_channel_contexts,
         .use_PCLK2 = true
     },
@@ -191,7 +191,7 @@ static timer_st const timers[] =
         .RCC_APBPeriphClockCmd = RCC_APB1PeriphClockCmd,
         .RCC_APBPeriph = RCC_APB1Periph_TIM3,
         .IRQ_channel = TIM3_IRQn,
-        .num_channels = 1,
+        .num_channels = 4,
         .channels = tim3_timer_channel_contexts,
         .use_PCLK2 = false
     },
@@ -201,7 +201,7 @@ static timer_st const timers[] =
         .RCC_APBPeriphClockCmd = RCC_APB1PeriphClockCmd,
         .RCC_APBPeriph = RCC_APB1Periph_TIM4,
         .IRQ_channel = TIM4_IRQn,
-        .num_channels = 1,
+        .num_channels = 4,
         .channels = tim4_timer_channel_contexts,
         .use_PCLK2 = false
     },
@@ -211,7 +211,7 @@ static timer_st const timers[] =
         .RCC_APBPeriphClockCmd = RCC_APB2PeriphClockCmd,
         .RCC_APBPeriph = RCC_APB2Periph_TIM8,
         .IRQ_channel = TIM8_CC_IRQn,
-        .num_channels = 1,
+        .num_channels = 4,
         .channels = tim8_timer_channel_contexts,
         .use_PCLK2 = true
     }

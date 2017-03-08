@@ -247,19 +247,19 @@ int main(void)
     init_crank_signal();
 
     timed_events_init(1000000);    
-    init_pulses();
 
     CoInitOS(); /*!< Initialise CoOS */
 
-    /*!< Create three tasks	*/
-    CoCreateTask(taskC, 0, 1, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
-    CoCreateTask(taskD, 0, 2, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
-
     initSerialTask();
+    init_pulses();
+
+    /* Create some dummy tasks */ 
+    CoCreateTask(taskC, 0, 3, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
+    //CoCreateTask(taskD, 0, 9, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
 
     fprintf(stderr, "CoOS RTOS: Starting scheduler\r\n");
 
-    CoStartOS(); /*!< Start multitask	           */
+    CoStartOS(); /* Start scheduler. */
 
     //printf("CoOS RTOS: Scheduler stopped\n");
     while (1)
