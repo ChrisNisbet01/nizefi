@@ -25,6 +25,8 @@ struct timed_event_context_st
     uint16_t gpio_pin;
     uint32_t systick_at_start;
     uint32_t systick_at_gpio_off;
+    uint32_t systick_at_start_task;
+    uint32_t systick_at_gpio_off_task; 
 
     OS_FlagID flag;
 };
@@ -71,7 +73,10 @@ static void timed_event_initial_delay_isr_handler(timed_event_context_st * conte
 
 static void timed_event_initial_delay_task_handler(timed_event_context_st * context)
 {
-
+    if (context->systick_at_start_task == 0)
+    {
+        context->systick_at_start_task = SysTick->VAL; 
+    }
     context->isr_handler = timed_event_active_isr_handler;
     context->task_handler = timed_event_active_task_handler;
 
@@ -89,6 +94,10 @@ static void timed_event_active_isr_handler(timed_event_context_st * context)
 
 static void timed_event_active_task_handler(timed_event_context_st * context)
 {
+    if (context->systick_at_gpio_off_task == 0)
+    {
+        context->systick_at_gpio_off_task = SysTick->VAL;
+    }
     if (context->pulses > 0)
     {
         context->pulses--;
@@ -163,6 +172,8 @@ void pulse_start(uint32_t pulses, uint16_t pulse_us, uint16_t period_us)
              */
             context->systick_at_start = 0; 
             context->systick_at_gpio_off = 0;
+            context->systick_at_start_task = 0;
+            context->systick_at_gpio_off_task = 0; 
 
             timer_channel_schedule_new_based_event(context->timer_context, counts[index], period_us);
         }
@@ -230,11 +241,16 @@ void print_pulse_details(void)
 
         if (context->systick_at_start > 0)
         {
-            printf("%u start: %"PRIu32" end: %"PRIu32" diff %"PRIu32"\r\n", 
+            printf("%u start: %"PRIu32" task: %"PRIu32" end: %"PRIu32" end: %"PRIu32" diff %"PRIu32"\r\n",
                    index, 
                    context->systick_at_start, 
+                   context->systick_at_start_task,
                    context->systick_at_gpio_off,
+                   context->systick_at_gpio_off_task,
                    context->systick_at_start - context->systick_at_gpio_off);
+            printf(" start diff: %"PRIu32" end diff: %"PRIu32"\r\n",
+                   context->systick_at_start - context->systick_at_start_task,
+                   context->systick_at_gpio_off - context->systick_at_gpio_off_task);
         }
     }
 }
