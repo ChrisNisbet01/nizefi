@@ -47,6 +47,7 @@ struct timer_st
     void (* RCC_APBPeriphClockCmd)(uint32_t RCC_APB1Periph, FunctionalState NewState);
     uint32_t RCC_APBPeriph;
     uint8_t IRQ_channel;
+    bool use_PCLK2;
 
     size_t num_channels;
     timer_channel_context_st * channels;
@@ -180,8 +181,9 @@ static timer_st const timers[] =
         .RCC_APBPeriphClockCmd = RCC_APB2PeriphClockCmd,
         .RCC_APBPeriph = RCC_APB2Periph_TIM1,
         .IRQ_channel = TIM1_CC_IRQn,
-        .num_channels = 4,
-        .channels = tim1_timer_channel_contexts
+        .num_channels = 1,
+        .channels = tim1_timer_channel_contexts,
+        .use_PCLK2 = true
     },
     [timer_3_index] =
     {
@@ -189,8 +191,9 @@ static timer_st const timers[] =
         .RCC_APBPeriphClockCmd = RCC_APB1PeriphClockCmd,
         .RCC_APBPeriph = RCC_APB1Periph_TIM3,
         .IRQ_channel = TIM3_IRQn,
-        .num_channels = 4,
-        .channels = tim3_timer_channel_contexts
+        .num_channels = 1,
+        .channels = tim3_timer_channel_contexts,
+        .use_PCLK2 = false
     },
     [timer_4_index] =
     {
@@ -198,8 +201,9 @@ static timer_st const timers[] =
         .RCC_APBPeriphClockCmd = RCC_APB1PeriphClockCmd,
         .RCC_APBPeriph = RCC_APB1Periph_TIM4,
         .IRQ_channel = TIM4_IRQn,
-        .num_channels = 4,
-        .channels = tim4_timer_channel_contexts
+        .num_channels = 1,
+        .channels = tim4_timer_channel_contexts,
+        .use_PCLK2 = false
     },
     [timer_8_index] =
     {
@@ -207,39 +211,44 @@ static timer_st const timers[] =
         .RCC_APBPeriphClockCmd = RCC_APB2PeriphClockCmd,
         .RCC_APBPeriph = RCC_APB2Periph_TIM8,
         .IRQ_channel = TIM8_CC_IRQn,
-        .num_channels = 4,
-        .channels = tim8_timer_channel_contexts
+        .num_channels = 1,
+        .channels = tim8_timer_channel_contexts,
+        .use_PCLK2 = true
     }
 };
 #define NUM_TIMERS (sizeof timers / sizeof timers[0])
 
 static timer_context_st timer_context;
 
-static void initTimerTimeBase(TIM_TypeDef * tim, uint_fast16_t period, uint_fast32_t frequency_hz)
+static void initTimerTimeBase(TIM_TypeDef * tim, uint_fast16_t period, uint_fast32_t frequency_hz, bool const use_PCLK2)
 {
     TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
+    uint32_t CLK_Frequency;
 
     TIM_TimeBaseStructInit(&TIM_TimeBaseStructure);
 
     RCC_ClocksTypeDef clocks;
     uint32_t multiplier;
+
     RCC_GetClocksFreq(&clocks);
 
-    if (clocks.PCLK1_Frequency == clocks.SYSCLK_Frequency)
+    if (use_PCLK2)
     {
-        multiplier = 1;
+        multiplier = 2;
+        CLK_Frequency =  multiplier * clocks.PCLK2_Frequency;
     }
     else
     {
-        multiplier = 2;
+        if (clocks.PCLK1_Frequency == clocks.SYSCLK_Frequency)
+        {
+            multiplier = 1;
+        }
+        else
+        {
+            multiplier = 2;
+        }
+        CLK_Frequency =  multiplier * clocks.PCLK1_Frequency;
     }
-    /* XXX - FIXME - Timers 1 and 8 use PCLK2_Frequency I think. 
-     * They certainly need a different prescaler to timers 3 and 4 
-     * because they are running twice the speed. 
-     */
-    uint32_t CLK_Frequency =  multiplier * clocks.PCLK1_Frequency;
-
-    RCC_GetClocksFreq(&clocks);
 
     TIM_TimeBaseStructure.TIM_Prescaler = (CLK_Frequency / frequency_hz) - 1;
 
@@ -257,7 +266,7 @@ static void timer_init(timer_st const * const timer, uint32_t frequency)
     /* TIMx clock enable */
     timer->RCC_APBPeriphClockCmd(timer->RCC_APBPeriph, ENABLE);
 
-    initTimerTimeBase(timer->TIM, 0xffff, frequency);
+    initTimerTimeBase(timer->TIM, 0xffff, frequency, timer->use_PCLK2);
 
     /* Enable TIM4 Interrupt */
     NVIC_InitStructure.NVIC_IRQChannel = timer->IRQ_channel;
