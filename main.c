@@ -30,10 +30,14 @@
 #include "stm32f4xx_exti.h"
 #include "stm32f4xx_syscfg.h"
 #include "usart.h"
-#include <math.h>
+
+#include "timed_events.h"
+#include "pulser.h"
 
 #include "hi_res_timer.h"
 #include "serial_task.h"
+
+#include <math.h>
 
 /*---------------------------- Symbol Define -------------------------------*/
 #define STACK_SIZE_TASKC 1024              /*!< Define "taskC" task size */
@@ -181,13 +185,14 @@ static void init_leds(void)
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
 
     /* Configure PD13, PD14 and PD15 in output push-pull mode */
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13 | GPIO_Pin_14  | GPIO_Pin_15;
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14  | GPIO_Pin_15;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
     GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
     GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
     GPIO_Init(GPIOD, &GPIO_InitStructure);
 
+#if 0 /* Used if tying GPIO pins to timers. */
     GPIO_PinAFConfig(GPIOD, GPIO_PinSource12, GPIO_AF_TIM4);
 
     /* Configure PD12 to be connected to TIM4 */
@@ -197,102 +202,9 @@ static void init_leds(void)
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
     GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
     GPIO_Init(GPIOD, &GPIO_InitStructure);
+#endif
 }
 
-typedef struct timed_event_context_st timed_event_context_st;
-typedef void(* state_handler)(timed_event_context_st * context);
-
-struct timed_event_context_st
-{
-    volatile uint16_t initial_delay_us;
-    volatile uint16_t pulses;
-    uint16_t active_us;
-    uint16_t inactive_us;
-    state_handler handler;
-    TIM_TypeDef * TIMx;
-};
-
-static void timed_event_init_handler(timed_event_context_st * context);
-static void timed_event_initial_delay_handler(timed_event_context_st * context);
-static void timed_event_active_handler(timed_event_context_st * context);
-static void timed_event_inactive_handler(timed_event_context_st * context);
-
-static void timed_event_init_handler(timed_event_context_st * context)
-{
-    TIM_SetCompare1(context->TIMx, (uint16_t)(TIM_GetCounter(context->TIMx) + context->initial_delay_us));
-
-    context->handler = timed_event_initial_delay_handler;
-}
-
-static void timed_event_initial_delay_handler(timed_event_context_st * context)
-{
-    TIM_SetCompare1(context->TIMx, (uint16_t)(TIM_GetCapture1(context->TIMx) + context->active_us));
-
-    GPIO_SetBits(GPIOD, GPIO_Pin_14);
-
-    context->handler = timed_event_active_handler;
-}
-
-static void timed_event_active_handler(timed_event_context_st * context)
-{
-    GPIO_ResetBits(GPIOD, GPIO_Pin_14);
-    if (context->pulses > 0)
-    {
-        context->pulses--;
-    }
-    if (context->pulses > 0)
-    {
-        TIM_SetCompare1(context->TIMx, (uint16_t)(TIM_GetCapture1(context->TIMx) + context->inactive_us));
-        context->handler = timed_event_inactive_handler;
-    }
-    else
-    {
-        TIM_ITConfig(context->TIMx, TIM_IT_CC1, DISABLE);
-        context->handler = timed_event_init_handler;
-    }
-}
-
-static void timed_event_inactive_handler(timed_event_context_st * context)
-{
-    TIM_SetCompare1(context->TIMx, (uint16_t)(TIM_GetCapture1(context->TIMx) + context->active_us));
-
-    GPIO_SetBits(GPIOD, GPIO_Pin_14);
-    context->handler = timed_event_active_handler;
-}
-
-static timed_event_context_st timed_event_context;
-
-static void timed_event_callback()
-{
-    timed_event_context.handler(&timed_event_context);
-}
-
-void TIM4_IRQHandler(void)
-{
-    TIM_TypeDef * TIMx = TIM4;
-
-    if (TIM_GetITStatus(TIMx, TIM_IT_CC1) != RESET)
-    {
-        TIM_ClearITPendingBit(TIMx, TIM_IT_CC1);
-        timed_event_callback();
-    }
-}
-
-void pulse_start(uint32_t pulses, uint16_t pulse_us, uint16_t period_us)
-{
-    TIM_TypeDef * TIMx = TIM4;
-
-    timed_event_context.handler = timed_event_init_handler;
-    timed_event_context.initial_delay_us = period_us;
-    timed_event_context.active_us = pulse_us;
-    timed_event_context.inactive_us = period_us - pulse_us;
-    timed_event_context.pulses = pulses;
-    timed_event_context.TIMx = TIMx;
-
-    TIM_ClearITPendingBit(TIMx, TIM_IT_CC1);
-    TIM_ITConfig(TIMx, TIM_IT_CC1, ENABLE);
-    TIM_GenerateEvent(TIMx, TIM_EventSource_CC1);
-}
  
 void taskC(void * pdata)
 {
@@ -301,7 +213,7 @@ void taskC(void * pdata)
     {
         if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0))
         {
-            pulse_start(6, 1000, 10000);
+            pulse_start(6, 1000, 5000);
         }
         CoTickDelay(CFG_SYSTICK_FREQ / 4);
     }
@@ -322,48 +234,6 @@ void hi_res_tick(void)
     GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
 }
 
- 
-void pulse_cfg(void)
-{
-    TIM_TypeDef * TIMx = TIM4; 
-    TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
-    NVIC_InitTypeDef NVIC_InitStructure;
-
-    /* TIM4 clock enable */
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM4, ENABLE);
-
-    /* Time base configuration */
-    TIM_TimeBaseStructInit(&TIM_TimeBaseStructure);
-    TIM_TimeBaseStructure.TIM_Period = 65535;
-    TIM_TimeBaseStructure.TIM_Prescaler = (84000000 / 10000) - 1; //84 - 1; //Prescale clock to generate 1MHz
-    TIM_TimeBaseStructure.TIM_ClockDivision = 0;
-    TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
-    TIM_TimeBaseInit(TIMx, &TIM_TimeBaseStructure);
-
-    /* Enable TIM4 Interrupt */
-    NVIC_InitStructure.NVIC_IRQChannel = TIM4_IRQn;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 4;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStructure);
-
-    TIM_ITConfig(TIMx, TIM_IT_CC1, DISABLE);
-
-    /* Enable the timer. */
-    TIM_Cmd(TIMx, ENABLE);
-
-}
-
-void init_pulses(void)
-{
-    /* Initialise system */
-
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
-
-    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4); //4 bits for pre-emption priority 0 bits for subpriority
-    pulse_cfg();
-}
-
 
 
 int main(void)
@@ -376,6 +246,7 @@ int main(void)
     init_button();
     init_crank_signal();
 
+    timed_events_init(10000);    
     init_pulses();
 
     CoInitOS(); /*!< Initialise CoOS */

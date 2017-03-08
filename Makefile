@@ -121,6 +121,7 @@ LDFLAGS = $(CPU_FLAGS) \
 # now specify source files
 COMMON_SRC = \
 	$(SRC_DIR)/main.c \
+	$(SRC_DIR)/pulser.c \
 	$(SRC_DIR)/timers/*.c \
 	$(SRC_DIR)/drivers/serial.c \
 	$(SRC_DIR)/drivers/uart.c \

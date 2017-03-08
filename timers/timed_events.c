@@ -8,7 +8,7 @@
 typedef void (* timed_event_handler)(void * arg);
 typedef struct timer_st timer_st; 
 
-typedef struct timer_channel_context_st
+struct timer_channel_context_st
 {
     volatile uint32_t * ccr;
 
@@ -16,16 +16,23 @@ typedef struct timer_channel_context_st
     bool in_use;
 
     timer_st const * timer;
+
+    /* XXX - TODO. Move these into a const array with one entry for 
+     * each channel, and replace with a pointer to the appropriate 
+     * entry. 
+     */
     uint32_t const capture_compare_interrupt;
     uint32_t const capture_compare_event_source;
+    void (* TIM_SetCompare)(TIM_TypeDef * TIMx, uint32_t Compare);
+    uint32_t(*TIM_GetCapture)(TIM_TypeDef * TIMx);
+
 
     bool free_after_event; /* Set if the user attempts to free the timer while it is still in use. */
-    uint32_t last_capture_compare_count; /* TIM counter value at last event. Used as the base when scheduling new events. */
 
     timed_event_handler handler;
     void * arg;
 
-} timer_channel_context_st;
+};
 
 typedef struct timer_context_st
 {
@@ -36,28 +43,40 @@ typedef struct timer_context_st
 
 struct timer_st
 {
-    TIM_TypeDef const * TIM;
-    size_t const num_channels;
-    timer_channel_context_st * const channels;
+    TIM_TypeDef * TIM;
+    void (* RCC_APBPeriphClockCmd)(uint32_t RCC_APB1Periph, FunctionalState NewState);
+    uint32_t RCC_APBPeriph;
+    uint8_t IRQ_channel;
+
+    size_t num_channels;
+    timer_channel_context_st * channels;
 };
 
 static timer_channel_context_st tim1_timer_channel_contexts[] =
 {
     {
         .capture_compare_interrupt = TIM_IT_CC1,
-        .capture_compare_event_source = TIM_EventSource_CC1
+        .capture_compare_event_source = TIM_EventSource_CC1,
+        .TIM_SetCompare = TIM_SetCompare1,
+        .TIM_GetCapture = TIM_GetCapture1
     },
     {
         .capture_compare_interrupt = TIM_IT_CC2,
-        .capture_compare_event_source = TIM_EventSource_CC2
+        .capture_compare_event_source = TIM_EventSource_CC2,
+        .TIM_SetCompare = TIM_SetCompare2,
+        .TIM_GetCapture = TIM_GetCapture2
     },
     {
         .capture_compare_interrupt = TIM_IT_CC3,
-        .capture_compare_event_source = TIM_EventSource_CC3
+        .capture_compare_event_source = TIM_EventSource_CC3,
+        .TIM_SetCompare = TIM_SetCompare3,
+        .TIM_GetCapture = TIM_GetCapture3
     },
     {
         .capture_compare_interrupt = TIM_IT_CC4,
-        .capture_compare_event_source = TIM_EventSource_CC4
+        .capture_compare_event_source = TIM_EventSource_CC4,
+        .TIM_SetCompare = TIM_SetCompare4,
+        .TIM_GetCapture = TIM_GetCapture4
     }
 };
 
@@ -65,19 +84,27 @@ static timer_channel_context_st tim3_timer_channel_contexts[] =
 {
     {
         .capture_compare_interrupt = TIM_IT_CC1,
-        .capture_compare_event_source = TIM_EventSource_CC1
+        .capture_compare_event_source = TIM_EventSource_CC1,
+        .TIM_SetCompare = TIM_SetCompare1,
+        .TIM_GetCapture = TIM_GetCapture1
     },
     {
         .capture_compare_interrupt = TIM_IT_CC2,
-        .capture_compare_event_source = TIM_EventSource_CC2
+        .capture_compare_event_source = TIM_EventSource_CC2,
+        .TIM_SetCompare = TIM_SetCompare2,
+        .TIM_GetCapture = TIM_GetCapture2
     },
     {
         .capture_compare_interrupt = TIM_IT_CC3,
-        .capture_compare_event_source = TIM_EventSource_CC3
+        .capture_compare_event_source = TIM_EventSource_CC3,
+        .TIM_SetCompare = TIM_SetCompare3,
+        .TIM_GetCapture = TIM_GetCapture3
     },
     {
         .capture_compare_interrupt = TIM_IT_CC4,
-        .capture_compare_event_source = TIM_EventSource_CC4
+        .capture_compare_event_source = TIM_EventSource_CC4,
+        .TIM_SetCompare = TIM_SetCompare4,
+        .TIM_GetCapture = TIM_GetCapture4
     }
 };
 
@@ -85,19 +112,27 @@ static timer_channel_context_st tim4_timer_channel_contexts[] =
 {
     {
         .capture_compare_interrupt = TIM_IT_CC1,
-        .capture_compare_event_source = TIM_EventSource_CC1
+        .capture_compare_event_source = TIM_EventSource_CC1,
+        .TIM_SetCompare = TIM_SetCompare1,
+        .TIM_GetCapture = TIM_GetCapture1
     },
     {
         .capture_compare_interrupt = TIM_IT_CC2,
-        .capture_compare_event_source = TIM_EventSource_CC2
+        .capture_compare_event_source = TIM_EventSource_CC2,
+        .TIM_SetCompare = TIM_SetCompare2,
+        .TIM_GetCapture = TIM_GetCapture2
     },
     {
         .capture_compare_interrupt = TIM_IT_CC3,
-        .capture_compare_event_source = TIM_EventSource_CC3
+        .capture_compare_event_source = TIM_EventSource_CC3,
+        .TIM_SetCompare = TIM_SetCompare3,
+        .TIM_GetCapture = TIM_GetCapture3
     },
     {
         .capture_compare_interrupt = TIM_IT_CC4,
-        .capture_compare_event_source = TIM_EventSource_CC4
+        .capture_compare_event_source = TIM_EventSource_CC4,
+        .TIM_SetCompare = TIM_SetCompare4,
+        .TIM_GetCapture = TIM_GetCapture4
     }
 };
 
@@ -105,41 +140,73 @@ static timer_channel_context_st tim8_timer_channel_contexts[] =
 {
     {
         .capture_compare_interrupt = TIM_IT_CC1,
-        .capture_compare_event_source = TIM_EventSource_CC1
+        .capture_compare_event_source = TIM_EventSource_CC1,
+        .TIM_SetCompare = TIM_SetCompare1,
+        .TIM_GetCapture = TIM_GetCapture1
     },
     {
         .capture_compare_interrupt = TIM_IT_CC2,
-        .capture_compare_event_source = TIM_EventSource_CC2
+        .capture_compare_event_source = TIM_EventSource_CC2,
+        .TIM_SetCompare = TIM_SetCompare2,
+        .TIM_GetCapture = TIM_GetCapture2
     },
     {
         .capture_compare_interrupt = TIM_IT_CC3,
-        .capture_compare_event_source = TIM_EventSource_CC3
+        .capture_compare_event_source = TIM_EventSource_CC3,
+        .TIM_SetCompare = TIM_SetCompare3,
+        .TIM_GetCapture = TIM_GetCapture3
     },
     {
         .capture_compare_interrupt = TIM_IT_CC4,
-        .capture_compare_event_source = TIM_EventSource_CC4
+        .capture_compare_event_source = TIM_EventSource_CC4,
+        .TIM_SetCompare = TIM_SetCompare4,
+        .TIM_GetCapture = TIM_GetCapture4
     }
 };
 
+typedef enum timer_index_t
+{
+    timer_1_index,
+    timer_3_index,
+    timer_4_index,
+    timer_8_index,
+} timer_index_t;
+
 static timer_st const timers[] =
 {
+    [timer_1_index] = 
     {
         .TIM = TIM1,
+        .RCC_APBPeriphClockCmd = RCC_APB2PeriphClockCmd,
+        .RCC_APBPeriph = RCC_APB2Periph_TIM1,
+        .IRQ_channel = TIM1_CC_IRQn,
         .num_channels = 4,
         .channels = tim1_timer_channel_contexts
     },
+    [timer_3_index] =
     {
         .TIM = TIM3,
+        .RCC_APBPeriphClockCmd = RCC_APB1PeriphClockCmd,
+        .RCC_APBPeriph = RCC_APB1Periph_TIM3,
+        .IRQ_channel = TIM3_IRQn,
         .num_channels = 4,
         .channels = tim3_timer_channel_contexts
     },
+    [timer_4_index] =
     {
         .TIM = TIM4,
+        .RCC_APBPeriphClockCmd = RCC_APB1PeriphClockCmd,
+        .RCC_APBPeriph = RCC_APB1Periph_TIM4,
+        .IRQ_channel = TIM4_IRQn,
         .num_channels = 4,
         .channels = tim4_timer_channel_contexts
     },
+    [timer_8_index] =
     {
         .TIM = TIM8,
+        .RCC_APBPeriphClockCmd = RCC_APB2PeriphClockCmd,
+        .RCC_APBPeriph = RCC_APB2Periph_TIM8,
+        .IRQ_channel = TIM8_CC_IRQn,
         .num_channels = 4,
         .channels = tim8_timer_channel_contexts
     }
@@ -148,7 +215,62 @@ static timer_st const timers[] =
 
 static timer_context_st timer_context;
 
-void timed_events_init(size_t timer_frequency)
+static void initTimerTimeBase(TIM_TypeDef * tim, uint_fast16_t period, uint_fast32_t frequency_hz)
+{
+    TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
+
+    TIM_TimeBaseStructInit(&TIM_TimeBaseStructure);
+
+    RCC_ClocksTypeDef clocks;
+    uint32_t multiplier;
+    RCC_GetClocksFreq(&clocks);
+
+    if (clocks.PCLK1_Frequency == clocks.SYSCLK_Frequency)
+    {
+        multiplier = 1;
+    }
+    else
+    {
+        multiplier = 2;
+    }
+    /* XXX - FIXME - Timers 1 and 8 use PCLK2_Frequency I think. 
+     * They certainly need a different prescaler to timers 3 and 4 
+     * because they are running twice the speed. 
+     */
+    uint32_t CLK_Frequency =  multiplier * clocks.PCLK1_Frequency;
+
+    RCC_GetClocksFreq(&clocks);
+
+    TIM_TimeBaseStructure.TIM_Prescaler = (CLK_Frequency / frequency_hz) - 1;
+
+    TIM_TimeBaseStructure.TIM_Period = period;
+    TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;
+    TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
+
+    TIM_TimeBaseInit(tim, &TIM_TimeBaseStructure);
+}
+
+static void timer_init(timer_st const * const timer, uint32_t frequency)
+{
+    NVIC_InitTypeDef NVIC_InitStructure;
+
+    /* TIMx clock enable */
+    timer->RCC_APBPeriphClockCmd(timer->RCC_APBPeriph, ENABLE);
+
+    initTimerTimeBase(timer->TIM, 0xffff, frequency);
+
+    /* Enable TIM4 Interrupt */
+    NVIC_InitStructure.NVIC_IRQChannel = timer->IRQ_channel;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 4;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+
+    /* Enable the timer. */
+    TIM_Cmd(timer->TIM, ENABLE);
+}
+
+void timed_events_init(uint32_t timer_frequency)
 {
     size_t timer_index;
 
@@ -170,6 +292,133 @@ void timed_events_init(size_t timer_frequency)
 
             channel->timer = timer;
             LIST_INSERT_HEAD(&timer_context.unused_timer_list, channel, entry);
+
+            /* Disable the channel interrupts before getting the timer up 
+             * and running. 
+             */
+            TIM_ITConfig(timer->TIM, channel->capture_compare_interrupt, DISABLE);
+
+            timer_init(timer, timer_frequency);
         }
     }
+}
+
+timer_channel_context_st * timer_channel_get(void (* const cb)(void * const arg), void * const arg)
+{
+    timer_channel_context_st * channel;
+
+    channel = LIST_FIRST(&timer_context.unused_timer_list);
+
+    if (channel == NULL)
+    {
+        goto done;
+    }
+
+    LIST_REMOVE(channel, entry);
+    channel->in_use = true;
+    channel->handler = cb;
+    channel->arg = arg;
+    LIST_INSERT_HEAD(&timer_context.used_timer_list, channel, entry);
+
+done:
+    return channel;
+}
+
+void timer_channel_free(timer_channel_context_st * const channel)
+{
+    /* TODO: ensure the channel is in the inuse list. */
+
+    LIST_REMOVE(channel, entry);
+    channel->in_use = false;
+    LIST_INSERT_HEAD(&timer_context.unused_timer_list, channel, entry);
+}
+
+void timer_channel_schedule_followup_event(timer_channel_context_st * const channel, uint32_t const delay_us)
+{
+    /* Assumes that the capture interrupt is still enabled. */
+    TIM_TypeDef * const TIMx = channel->timer->TIM;
+
+    channel->TIM_SetCompare(TIMx, (uint16_t)(channel->TIM_GetCapture(TIMx) + delay_us));
+}
+
+void timer_channel_schedule_new_event(timer_channel_context_st * const channel, uint32_t const delay_us)
+{
+    TIM_TypeDef * const TIMx = channel->timer->TIM;
+
+    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, DISABLE);
+    TIM_ClearITPendingBit(TIMx, channel->capture_compare_interrupt);
+
+    channel->TIM_SetCompare(TIMx, (uint16_t)(TIM_GetCounter(TIMx) + delay_us));
+
+    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, ENABLE);
+}
+
+uint32_t timer_channel_get_current_time(timer_channel_context_st * const channel)
+{
+    TIM_TypeDef * const TIMx = channel->timer->TIM;
+
+    return TIM_GetCounter(TIMx);
+}
+
+void timer_channel_disable(timer_channel_context_st * const channel)
+{
+    TIM_TypeDef * const TIMx = channel->timer->TIM;
+
+    TIM_ITConfig(TIMx, channel->capture_compare_interrupt, DISABLE);
+}
+
+static void TIM_Handle_CC_IRQ(TIM_TypeDef * const TIMx, timer_channel_context_st * const channel)
+{
+    if (TIM_GetITStatus(TIMx, channel->capture_compare_interrupt) != RESET)
+    {
+        TIM_ClearITPendingBit(TIMx, channel->capture_compare_interrupt);
+        if (channel->handler != NULL)
+        {
+            /* It is left to the handler to stop the interrupts or 
+             * schedule another event. 
+             */
+            channel->handler(channel->arg);
+        }
+    }
+}
+
+static void TIM_IRQ_Handler(timer_st const * const timer)
+{
+    TIM_TypeDef * const TIMx = timer->TIM;
+    size_t index;
+
+    for (index = 0; index < timer->num_channels; index++)
+    {
+        timer_channel_context_st * const channel = &timer->channels[index];
+
+        TIM_Handle_CC_IRQ(TIMx, channel);
+    }
+}
+
+void TIM3_IRQHandler(void)
+{
+    timer_st const * const timer = &timers[timer_3_index];
+
+    TIM_IRQ_Handler(timer);
+}
+
+void TIM4_IRQHandler(void)
+{
+    timer_st const * const timer = &timers[timer_4_index];
+
+    TIM_IRQ_Handler(timer);
+}
+
+void TIM1_CC_IRQHandler(void)
+{
+    timer_st const * const timer = &timers[timer_1_index];
+
+    TIM_IRQ_Handler(timer);
+}
+
+void TIM8_CC_IRQHandler(void)
+{
+    timer_st const * const timer = &timers[timer_8_index];
+
+    TIM_IRQ_Handler(timer);
 }
