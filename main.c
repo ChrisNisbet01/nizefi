@@ -213,7 +213,7 @@ void taskC(void * pdata)
     {
         if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0))
         {
-            pulse_start(6, 100, 10000);
+            pulse_start(10000, 100);
         }
         CoTickDelay(CFG_SYSTICK_FREQ / 4);
     }

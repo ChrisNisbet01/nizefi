@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-void pulse_start(uint32_t pulses, uint16_t pulse_us, uint16_t period_us);
+void pulse_start(uint32_t initial_delay_us, uint16_t pulse_us);
 void init_pulses(void);
 void print_pulse_details(void);
 void reset_pulse_details(void);
