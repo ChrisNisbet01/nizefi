@@ -7,6 +7,7 @@
 #include <coocox.h>
 #include <serial.h>
 #include "hi_res_timer.h"
+#include "pulser.h"
 
 #include <stm32f4xx_gpio.h>
 
@@ -125,6 +126,8 @@ static void doDebugOutput(uint32_t val)
 {
 
     //show_sysclock_info(val);
+    print_pulse_details();
+
 }
 
 static void doPeriodicSerialTasks(uint32_t val)

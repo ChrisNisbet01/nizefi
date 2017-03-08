@@ -3,6 +3,8 @@
 #include "stm32f4xx_gpio.h"
 
 #include <stddef.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 typedef struct timed_event_context_st timed_event_context_st;
 typedef void (* state_handler)(timed_event_context_st * context);
@@ -16,6 +18,8 @@ struct timed_event_context_st
     state_handler handler;
     timer_channel_context_st * timer_context;
     uint16_t gpio_pin;
+    uint32_t systick_at_start;
+    uint32_t systick_at_gpio_off;
 };
 
 static void timed_event_init_handler(timed_event_context_st * context);
@@ -42,6 +46,11 @@ static void timed_event_initial_delay_handler(timed_event_context_st * context)
 static void timed_event_active_handler(timed_event_context_st * context)
 {
     GPIO_ResetBits(GPIOD, context->gpio_pin);
+    if (context->systick_at_gpio_off == 0)
+    {
+        context->systick_at_gpio_off = SysTick->VAL;
+    }
+
     if (context->pulses > 0)
     {
         context->pulses--;
@@ -95,6 +104,8 @@ void pulse_start(uint32_t pulses, uint16_t pulse_us, uint16_t period_us)
             /* XXX - Fix so that we don't have both init and initial delay 
              * states. 
              */
+            context->systick_at_start = SysTick->VAL; 
+            context->systick_at_gpio_off = 0;
             timer_channel_schedule_new_event(context->timer_context, period_us);
         }
     }
@@ -113,4 +124,17 @@ void init_pulses(void)
     }
 }
 
+void print_pulse_details(void)
+{
+    size_t index;
 
+    for (index = 0; index < 4; index++)
+    {
+        timed_event_context_st * const context = &timed_event_contexts[index];
+
+        if (context->systick_at_start > 0)
+        {
+            printf("%u start: %"PRIu32" end: %"PRIu32"\r\n", index, context->systick_at_start, context->systick_at_gpio_off);
+        }
+    }
+}
