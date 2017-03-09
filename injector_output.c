@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-struct injector_context_st
+struct injector_output_st
 {
     gpio_config_st const * const gpio_config;
     pulsed_output_st * pulsed_output;
@@ -39,7 +39,7 @@ static gpio_config_st const injector_gpios[] =
 /* Temp debug just use a couple of LED pins. Ignition will use 
  * the other couple. 
  */
-static injector_context_st injector_contexts[NUM_INJECTOR_GPIOS] =
+static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
 {
     [injector_1_index] =
     {
@@ -51,7 +51,7 @@ static injector_context_st injector_contexts[NUM_INJECTOR_GPIOS] =
         .gpio_config = &injector_gpios[injector_2_index]
     }
 };
-static size_t next_injector_context;
+static size_t next_injector_output;
 
 static void initialise_injector_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pin, uint32_t const RCC_AHBPeriph)
 {
@@ -72,33 +72,33 @@ static void initialise_injector_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pi
 /* XXX - Consider an operational mode where mutliple injectors 
  * should be fired at the same time (i.e. batch mode). 
  */
-injector_context_st * injector_output_get(void)
+injector_output_st * injector_output_get(void)
 {
-    injector_context_st * injector_context;
+    injector_output_st * injector_output;
     gpio_config_st const * gpio_config;
 
-    if (next_injector_context >= NUM_INJECTOR_GPIOS)
+    if (next_injector_output >= NUM_INJECTOR_GPIOS)
     {
-        injector_context = NULL;
+        injector_output = NULL;
         goto done;
     }
-    injector_context = &injector_contexts[next_injector_context];
-    gpio_config = injector_context->gpio_config;
-    next_injector_context++;
+    injector_output = &injector_outputs[next_injector_output];
+    gpio_config = injector_output->gpio_config;
+    next_injector_output++;
 
     /* Initialise the GPIO. */
     initialise_injector_gpio(gpio_config->port, gpio_config->pin, gpio_config->RCC_AHBPeriph);
 
-    injector_context->pulsed_output = pulsed_output_get(injector_context->gpio_config);
+    injector_output->pulsed_output = pulsed_output_get(injector_output->gpio_config);
 
 done:
-    return injector_context;
+    return injector_output;
 }
 
-void injector_pulse_schedule(injector_context_st * const injector_context,
+void injector_pulse_schedule(injector_output_st * const injector_output,
                              uint32_t initial_delay_us,
                              uint16_t pulse_us)
 {
-    pulsed_output_schedule(injector_context->pulsed_output, initial_delay_us, pulse_us);
+    pulsed_output_schedule(injector_output->pulsed_output, initial_delay_us, pulse_us);
 }
 
