@@ -73,6 +73,11 @@ void EXTI0_IRQHandler(void) {
         /* Clear interrupt flag */
 
         EXTI_ClearITPendingBit(EXTI_Line0);
+        if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0) == Bit_SET)
+        {
+            injector_pulse_schedule(injector_1, 100, 3000);
+        }
+
         /* Do your stuff when PA0 is changed */
         //GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
     }
@@ -218,8 +223,8 @@ void taskC(void * pdata)
     {
         if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0))
         {
-            injector_pulse_schedule(injector_1, 5000, 2500);
-            ignition_pulse_schedule(ignition_1, 50000, 2500);
+            //injector_pulse_schedule(injector_1, 5000, 2500);
+            //ignition_pulse_schedule(ignition_1, 50000, 2500);
         }
         CoTickDelay(CFG_SYSTICK_FREQ / 4);
     }
