@@ -33,6 +33,7 @@
 
 #include "timed_events.h"
 #include "pulser.h"
+#include "injector_output.h"
 
 #include "hi_res_timer.h"
 #include "serial_task.h"
@@ -48,6 +49,8 @@ GPIO_InitTypeDef GPIO_InitStructure;
 /*---------------------------- Variable Define -------------------------------*/
 static __attribute((aligned(8))) OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define "taskC" task stack */
 static __attribute((aligned(8))) OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
+
+static injector_context_st * injector;
 
 static void common_thread_task(char const * const task_name, 
                                unsigned int gpio_pin, 
@@ -213,7 +216,7 @@ void taskC(void * pdata)
     {
         if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0))
         {
-            pulse_start(10000, 100);
+            injector_pulse_schedule(injector, 5000, 2500);
         }
         CoTickDelay(CFG_SYSTICK_FREQ / 4);
     }
@@ -252,6 +255,7 @@ int main(void)
 
     initSerialTask();
     init_pulses();
+    injector = injector_output_get();
 
     /* Create some dummy tasks */ 
     CoCreateTask(taskC, 0, 3, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);

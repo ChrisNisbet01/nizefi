@@ -1,6 +1,5 @@
 #include "pulser.h"
 #include "timed_events.h"
-#include "stm32f4xx_gpio.h"
 
 #include <coocox.h>
 
@@ -12,26 +11,23 @@
 
 //#define PULSE_DEBUG
 
-typedef struct timed_event_context_st timed_event_context_st;
 typedef void (* state_handler)(timed_event_context_st * context);
-
-typedef struct gpio_config_st
-{
-    GPIO_TypeDef * port;
-    uint_fast16_t pin;
-} gpio_config_st;
 
 struct timed_event_context_st
 {
     OS_FlagID flag; /* Used to signal the pulser task to run from the ISR. */
 
-    uint_fast16_t active_us;
+    /* ISR level and task level state machine handlers. */
     state_handler isr_handler;
     state_handler task_handler;
+
     timer_channel_context_st * timer_context;
 
-    /* The output port:pin to pulse on/off. */
-    gpio_config_st gpio;
+    pulser_callback active_callback;
+    pulser_callback inactive_callback; 
+    void * user_arg;
+
+    uint_fast16_t active_us; /* The period of time the pulse should be active for. */
 
 #if defined(PULSE_DEBUG)
     /* Some debug information. */
@@ -47,6 +43,9 @@ static void timed_event_initial_delay_task_handler(timed_event_context_st * cont
 
 static void timed_event_active_isr_handler(timed_event_context_st * context);
 static void timed_event_active_task_handler(timed_event_context_st * context);
+
+static timed_event_context_st timed_event_contexts[NUM_PULSERS]; 
+static size_t next_pulser;
 
 static void indicate_timeout(timed_event_context_st * context)
 {
@@ -67,8 +66,8 @@ static void timed_event_idle_task_handler(timed_event_context_st * context)
 
 static void timed_event_initial_delay_isr_handler(timed_event_context_st * context)
 {
-    /* The initial delay is over so turn the output on. */
-    GPIO_SetBits(context->gpio.port, context->gpio.pin);
+    /* The initial delay is over. */
+    context->active_callback(context->user_arg);
 #if defined(PULSE_DEBUG)
     if (context->systick_at_start == 0)
     {
@@ -93,8 +92,8 @@ static void timed_event_initial_delay_task_handler(timed_event_context_st * cont
 
 static void timed_event_active_isr_handler(timed_event_context_st * context)
 {
-    /* The pulse time is over so turn the output off. */
-    GPIO_ResetBits(context->gpio.port, context->gpio.pin);
+    /* The pulse time is over. */
+    context->inactive_callback(context->user_arg);
 #if defined(PULSE_DEBUG)
     if (context->systick_at_gpio_off == 0)
     {
@@ -115,8 +114,6 @@ static void timed_event_active_task_handler(timed_event_context_st * context)
     context->task_handler = timed_event_idle_task_handler;
     timer_channel_disable(context->timer_context);
 }
-
-static timed_event_context_st timed_event_contexts[NUM_PULSERS];
 
 static void timed_event_callback(void * const arg)
 {
@@ -148,24 +145,35 @@ void schedule_pulse(timed_event_context_st * const context, uint32_t const base_
     }
 }
 
-void pulse_start(uint32_t initial_delay_us, uint16_t pulse_us)
+void pulse_start(timed_event_context_st * const context,
+                 uint32_t initial_delay_us, 
+                 uint16_t pulse_us)
 {
-    size_t index;
-    uint32_t counts[NUM_PULSERS];
+    schedule_pulse(context, timer_channel_get_current_time(context->timer_context), initial_delay_us, pulse_us);
+}
 
-    for (index = 0; index < NUM_PULSERS; index++)
+timed_event_context_st * pulser_get(pulser_callback const active_callback,
+                                    pulser_callback const inactive_callback,
+                                    void * const user_arg)
+{
+    timed_event_context_st * pulser;
+
+    if (next_pulser >= NUM_PULSERS)
     {
-        timed_event_context_st * const context = &timed_event_contexts[index];
-
-        counts[index] = timer_channel_get_current_time(context->timer_context);
+        pulser = NULL;
+        goto done;
     }
 
-    for (index = 0; index < NUM_PULSERS; index++)
-    {
-        timed_event_context_st * const context = &timed_event_contexts[index];
+    pulser = &timed_event_contexts[next_pulser];
 
-        schedule_pulse(context, counts[index], initial_delay_us, pulse_us);
-    }
+    pulser->active_callback = active_callback;
+    pulser->inactive_callback = inactive_callback;
+    pulser->user_arg = user_arg;
+
+    next_pulser++;
+
+done:
+    return pulser;
 }
 
 #define STACK_SIZE_PULSER 1024
@@ -202,12 +210,6 @@ void pulser_task(void * pdata)
     }
 }
 
-static void configure_timed_event(timed_event_context_st * const context, GPIO_TypeDef * const gpio_port, uint_fast16_t const gpio_pin)
-{
-    context->gpio.port = gpio_port;
-    context->gpio.pin = gpio_pin;
-}
-
 void init_pulses(void)
 {
     size_t index;
@@ -221,10 +223,6 @@ void init_pulses(void)
         context->flag = CoCreateFlag(Co_TRUE, Co_FALSE);
 
         context->timer_context = timer_channel_get(timed_event_callback, context);
-
-        /* Temp debug pulse the LEDS so I can see something happening. 
-         */
-        configure_timed_event(context, GPIOD, GPIO_Pin_12 << index);
     }
 }
 
