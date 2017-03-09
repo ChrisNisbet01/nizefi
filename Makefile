@@ -122,6 +122,7 @@ LDFLAGS = $(CPU_FLAGS) \
 COMMON_SRC = \
 	$(SRC_DIR)/main.c \
 	$(SRC_DIR)/pulser.c \
+	$(SRC_DIR)/pulsed_output.c \
 	$(SRC_DIR)/injector_output.c \
 	$(SRC_DIR)/timers/*.c \
 	$(SRC_DIR)/drivers/serial.c \

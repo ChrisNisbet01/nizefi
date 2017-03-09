@@ -12,7 +12,7 @@ timed_event_context_st * pulser_get(pulser_callback const active_callback,
 
 void pulse_start(timed_event_context_st * const pulser,
                  uint32_t initial_delay_us, 
-                 uint16_t pulse_us);
+                 uint_fast16_t pulse_us);
 void init_pulses(void);
 void print_pulse_details(void);
 void reset_pulse_details(void);

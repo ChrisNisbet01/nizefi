@@ -147,7 +147,7 @@ void schedule_pulse(timed_event_context_st * const context, uint32_t const base_
 
 void pulse_start(timed_event_context_st * const context,
                  uint32_t initial_delay_us, 
-                 uint16_t pulse_us)
+                 uint_fast16_t pulse_us)
 {
     schedule_pulse(context, timer_channel_get_current_time(context->timer_context), initial_delay_us, pulse_us);
 }

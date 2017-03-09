@@ -1,23 +1,15 @@
 #include "injector_output.h"
-#include "stm32f4xx_gpio.h"
-#include "pulser.h"
+#include "pulsed_output.h"
 
 #include <stddef.h>
-
-typedef struct gpio_config_st
-{
-    uint32_t RCC_AHBPeriph;
-    GPIO_TypeDef * port;
-    uint_fast16_t pin;
-} gpio_config_st; 
 
 struct injector_context_st
 {
     gpio_config_st const * const gpio_config;
-    timed_event_context_st * pulser;
+    pulsed_output_st * pulsed_output;
 };
 
-typedef enum inject_index_t
+typedef enum injector_index_t
 {
     injector_1_index,
     injector_2_index,
@@ -27,10 +19,7 @@ typedef enum inject_index_t
     injector_6_index,
     injector_7_index,
     injector_8_index
-} inject_index_t;
-
-static void injector_active_callback(void * const arg);
-static void injector_inactive_callback(void * const arg);
+} injector_index_t;
 
 static gpio_config_st const injector_gpios[] =
 {
@@ -62,30 +51,7 @@ static injector_context_st injector_contexts[NUM_INJECTOR_GPIOS] =
         .gpio_config = &injector_gpios[injector_2_index]
     }
 };
-
 static size_t next_injector_context;
-
-static void injector_active_callback(void * const arg)
-{
-    /* Called when the pulse goes active. Called from within an 
-     * ISR.
-     */
-    injector_context_st * const injector_context = arg;
-    gpio_config_st const * const gpio_config = injector_context->gpio_config;
-
-    GPIO_SetBits(gpio_config->port, gpio_config->pin);
-}
-
-static void injector_inactive_callback(void * const arg)
-{
-    /* Called when the pulse goes inactive. Called from within an 
-     * ISR.
-     */
-    injector_context_st * const injector_context = arg;
-    gpio_config_st const * const gpio_config = injector_context->gpio_config; 
-
-    GPIO_ResetBits(gpio_config->port, gpio_config->pin);
-}
 
 static void initialise_injector_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pin, uint32_t const RCC_AHBPeriph)
 {
@@ -123,9 +89,7 @@ injector_context_st * injector_output_get(void)
     /* Initialise the GPIO. */
     initialise_injector_gpio(gpio_config->port, gpio_config->pin, gpio_config->RCC_AHBPeriph);
 
-    injector_context->pulser = pulser_get(injector_active_callback,
-                                          injector_inactive_callback,
-                                          injector_context);
+    injector_context->pulsed_output = pulsed_output_get(injector_context->gpio_config);
 
 done:
     return injector_context;
@@ -135,6 +99,6 @@ void injector_pulse_schedule(injector_context_st * const injector_context,
                              uint32_t initial_delay_us,
                              uint16_t pulse_us)
 {
-    pulse_start(injector_context->pulser, initial_delay_us, pulse_us);
+    pulsed_output_schedule(injector_context->pulsed_output, initial_delay_us, pulse_us);
 }
 
