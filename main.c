@@ -90,6 +90,8 @@ static void common_thread_task(char const * const task_name,
     }
 }
 
+static int min_queue_length;
+static int current_queue_length;
 static trigger_signal_st * trigger_signal_get(void)
 {
     /* This function is called from within an IRQ. Entries are placed back into the queue with interrupts disabled.
@@ -99,6 +101,7 @@ static trigger_signal_st * trigger_signal_get(void)
     if (trigger_signal != NULL)
     {
         STAILQ_REMOVE_HEAD(&trigger_signal_free_list, entry);
+        current_queue_length--; 
     }
 
     return trigger_signal;
@@ -107,7 +110,11 @@ static trigger_signal_st * trigger_signal_get(void)
 static void trigger_signal_put(trigger_signal_st * const trigger_signal)
 {
     IRQ_DISABLE_SAVE();
-
+    if (current_queue_length < min_queue_length)
+    {
+        min_queue_length = current_queue_length;
+    }
+    current_queue_length++;
     STAILQ_INSERT_TAIL(&trigger_signal_free_list, trigger_signal, entry);
 
     IRQ_ENABLE_RESTORE();
@@ -212,12 +219,27 @@ static void init_crank_trigger_signal_list(void)
         trigger_signal_st * const trigger_signal = &trigger_signals[index];
 
         STAILQ_INSERT_TAIL(&trigger_signal_free_list, trigger_signal, entry);
+        current_queue_length++; 
     }
+}
+
+int min_queue_length_get(void)
+{
+    int const length = min_queue_length;
+
+    min_queue_length = 100;
+
+    return length;
+}
+
+float rpm_get(void)
+{
+    return trigger_36_1_rpm_get(trigger_context);
 }
 
 void debug_injector_pulse(void)
 {
-    injector_pulse_schedule(injector_1, 100, 3000);
+    injector_pulse_schedule(injector_1, 100, 1000);
 }
 
 void trigger_signal_task(void * pdata)

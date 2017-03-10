@@ -110,6 +110,19 @@ static void handleNewSerialData( void )
                         reset_pulse_details();
                     }
                     print_pulse_details();
+                    if (ch == ' ')
+                    {
+                        float rpm_get(void);
+                        float const rpm = rpm_get();
+                        uint32_t rpm_32 = rpm;
+
+                        //printf("rpm: %f\r\n", rpm);
+                        printf("rpm_32: %u\r\n", rpm_32);
+                    }
+                    if (ch == 'm')
+                    {
+                        printf("min length %d\r\n", min_queue_length_get());
+                    }
                 }
 			}
 		}

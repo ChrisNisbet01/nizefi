@@ -1,5 +1,6 @@
 #include "trigger_wheel_36_1.h"
 #include "queue.h"
+#include "rpm_calculator.h"
 
 #include <stddef.h>
 
@@ -53,7 +54,11 @@ struct trigger_wheel_36_1_context_st
                                  */
     tooth_context_st * tooth_next;
 
+    rpm_calculator_st * rpm_calculator;
+    float rpm;
+
     CIRCLEQ_HEAD(,tooth_context_st)teeth_queue;
+
 };
 
 static void trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, uint32_t const timestamp);
@@ -118,6 +123,7 @@ static void trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * 
 {
     tooth_context_st * current_tooth = context->tooth_next; 
     tooth_context_st * previous_tooth = CIRCLEQ_PREV(current_tooth, entry);
+    uint32_t const last_revolution_timestamp = current_tooth->last_timestamp;
 
     context->pulse_counter++;
     current_tooth->last_timestamp = timestamp;
@@ -125,8 +131,11 @@ static void trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * 
 
     if (current_tooth == context->tooth_1)
     {
+        uint32_t rotation_time_32 = timestamp - last_revolution_timestamp;
+        float const rotation_time = (float)rotation_time_32 / 1000000;
         /* Just found tooth #1. */
         debug_injector_pulse();
+        rpm_calculator_update(context->rpm_calculator, rotation_time, 1.0);
         context->revolution_counter++;
     }
 
@@ -155,10 +164,19 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     context->tooth_next = CIRCLEQ_FIRST(&context->teeth_queue);
     context->tooth_1 = NULL;
 
+    context->rpm_calculator = rpm_calculator_get();
+    rpm_calculator_smoothing_factor_set(context->rpm_calculator, 0.98);
+    context->rpm = 0.0;
+
     return context;
 }
 
 void trigger_36_1_handle_pulse(trigger_wheel_36_1_context_st * const context, uint32_t const timestamp)
 {
     context->state_hander(context, timestamp);
+}
+
+float trigger_36_1_rpm_get(trigger_wheel_36_1_context_st * const context)
+{
+    return rpm_calculator_smoothed_rpm_get(context->rpm_calculator);
 }
