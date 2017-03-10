@@ -37,6 +37,7 @@
 #include "pulser.h"
 #include "injector_output.h"
 #include "ignition_output.h"
+#include "trigger_wheel_36_1.h"
 
 #include "hi_res_timer.h"
 #include "serial_task.h"
@@ -73,7 +74,7 @@ static ignition_output_st * ignition_1;
 static trigger_signal_st trigger_signals[NUM_TRIGGER_SIGNALS];
 static trigger_signal_st * trigger_signal_queue[NUM_TRIGGER_SIGNALS];
 OS_EventID trigger_signal_message_queue_id; 
-
+trigger_wheel_36_1_context_st * trigger_context;
 
 static STAILQ_HEAD(, trigger_signal_st) trigger_signal_free_list;
 
@@ -214,6 +215,11 @@ static void init_crank_trigger_signal_list(void)
     }
 }
 
+void debug_injector_pulse(void)
+{
+    injector_pulse_schedule(injector_1, 100, 3000);
+}
+
 void trigger_signal_task(void * pdata)
 {
     unsigned int tooth = 0;
@@ -232,19 +238,15 @@ void trigger_signal_task(void * pdata)
         trigger_signal_put(trigger_signal);
 
         /* TODO: handle trigger signals properly. */
+        trigger_36_1_handle_pulse(trigger_context, timestamp);
 
-        tooth++;
-        if (tooth == 35)
-        {
-            tooth = 0;
-            injector_pulse_schedule(injector_1, 100, 3000); 
-        }
     }
 }
 
 static void init_crank_signal(void)
 {
     trigger_signal_message_queue_id = CoCreateQueue((void * *)&trigger_signal_queue, NUM_TRIGGER_SIGNALS, EVENT_SORT_TYPE_FIFO);
+    trigger_context = trigger_36_1_init();
 
     init_crank_trigger_signal_list();
 
