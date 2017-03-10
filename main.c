@@ -37,7 +37,6 @@
 #include "pulser.h"
 #include "injector_output.h"
 #include "ignition_output.h"
-#include "trigger_wheel_36_1.h"
 
 #include "hi_res_timer.h"
 #include "serial_task.h"
@@ -50,13 +49,6 @@
 #define STACK_SIZE_TASKD 1024              /*!< Define "taskD" task size */
 
 
-typedef struct trigger_signal_st
-{
-    STAILQ_ENTRY(trigger_signal_st) entry;
-
-    uint32_t timestamp;
-} trigger_signal_st;
-
 /* Private typedef -----------------------------------------------------------*/
 
 /*---------------------------- Variable Define -------------------------------*/
@@ -64,19 +56,8 @@ GPIO_InitTypeDef GPIO_InitStructure;
 static __attribute((aligned(8))) OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define "taskC" task stack */
 static __attribute((aligned(8))) OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
 
-#define TRIGGER_SIGNAL_TASK_STACK_SIZE 1024
-static __attribute((aligned(8))) OS_STK trigger_signal_task_stack[TRIGGER_SIGNAL_TASK_STACK_SIZE]; /*!< Define "taskD" task stack */
-
 static injector_output_st * injector_1;
 static ignition_output_st * ignition_1; 
-
-#define NUM_TRIGGER_SIGNALS 15
-static trigger_signal_st trigger_signals[NUM_TRIGGER_SIGNALS];
-static trigger_signal_st * trigger_signal_queue[NUM_TRIGGER_SIGNALS];
-OS_EventID trigger_signal_message_queue_id; 
-trigger_wheel_36_1_context_st * trigger_context;
-
-static STAILQ_HEAD(, trigger_signal_st) trigger_signal_free_list;
 
 static void common_thread_task(char const * const task_name, 
                                unsigned int gpio_pin, 
@@ -87,66 +68,6 @@ static void common_thread_task(char const * const task_name,
     {
         //GPIO_ToggleBits(GPIOD, gpio_pin); 
         CoTickDelay(delay_ticks);
-    }
-}
-
-static int min_queue_length;
-static int current_queue_length;
-static trigger_signal_st * trigger_signal_get(void)
-{
-    /* This function is called from within an IRQ. Entries are placed back into the queue with interrupts disabled.
-    */
-    trigger_signal_st * const trigger_signal = STAILQ_FIRST(&trigger_signal_free_list);
-
-    if (trigger_signal != NULL)
-    {
-        STAILQ_REMOVE_HEAD(&trigger_signal_free_list, entry);
-        current_queue_length--; 
-    }
-
-    return trigger_signal;
-}
-
-static void trigger_signal_put(trigger_signal_st * const trigger_signal)
-{
-    IRQ_DISABLE_SAVE();
-    if (current_queue_length < min_queue_length)
-    {
-        min_queue_length = current_queue_length;
-    }
-    current_queue_length++;
-    STAILQ_INSERT_TAIL(&trigger_signal_free_list, trigger_signal, entry);
-
-    IRQ_ENABLE_RESTORE();
-}
-
-/* Handle PA0 interrupt */
-void EXTI0_IRQHandler(void) {
-    /* Make sure that interrupt flag is set */
-    if (EXTI_GetITStatus(EXTI_Line0) != RESET) {
-        /* Clear interrupt flag */
-
-        EXTI_ClearITPendingBit(EXTI_Line0);
-
-        /* TODO: configurable edge? */
-        if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0) == Bit_RESET) /* Trigger on fallig edge. */
-        {
-            trigger_signal_st * const trigger_signal = trigger_signal_get();
-
-            if (trigger_signal != NULL)
-            {
-                trigger_signal->timestamp = hi_res_counter_val();
-
-                CoEnterISR();
-
-                isr_PostQueueMail(trigger_signal_message_queue_id, trigger_signal);
-
-                CoExitISR();
-            }
-        }
-
-        /* Do your stuff when PA0 is changed */
-        //GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
     }
 }
 
@@ -162,6 +83,7 @@ void EXTI9_5_IRQHandler(void)
     }
 }
 
+#if 0
 static void init_button(void)
 {
     /* Set variables used */
@@ -197,121 +119,6 @@ static void init_button(void)
     EXTI_Init(&EXTI_InitStruct);
  
     /* Add IRQ vector to NVIC */
-    /* PD0 is connected to EXTI_Line0, which has EXTI0_IRQn vector */
-    NVIC_InitStruct.NVIC_IRQChannel = EXTI0_IRQn;
-    /* Set priority */
-    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0x00;
-    /* Set sub priority */
-    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0x00;
-    /* Enable interrupt */
-    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
-    /* Add to NVIC */
-    NVIC_Init(&NVIC_InitStruct);
-}
-
-static void init_crank_trigger_signal_list(void)
-{
-    size_t index;
-
-    STAILQ_INIT(&trigger_signal_free_list); 
-    for (index = 0; index < NUM_TRIGGER_SIGNALS; index++)
-    {
-        trigger_signal_st * const trigger_signal = &trigger_signals[index];
-
-        STAILQ_INSERT_TAIL(&trigger_signal_free_list, trigger_signal, entry);
-        current_queue_length++; 
-    }
-}
-
-int min_queue_length_get(void)
-{
-    int const length = min_queue_length;
-
-    min_queue_length = 100;
-
-    return length;
-}
-
-float rpm_get(void)
-{
-    return trigger_36_1_rpm_get(trigger_context);
-}
-
-void debug_injector_pulse(void)
-{
-    injector_pulse_schedule(injector_1, 100, 1000);
-}
-
-void trigger_signal_task(void * pdata)
-{
-    unsigned int tooth = 0;
-    OS_EventID message_queue_id = *(OS_EventID *)pdata;
-
-    while (1)
-    {
-        StatusType err;
-        trigger_signal_st * trigger_signal;
-        uint32_t timestamp;
-
-        trigger_signal =  CoPendQueueMail(message_queue_id, 0, &err);
-
-        timestamp = trigger_signal->timestamp;
-
-        trigger_signal_put(trigger_signal);
-
-        /* TODO: handle trigger signals properly. */
-        trigger_36_1_handle_pulse(trigger_context, timestamp);
-
-    }
-}
-
-static void init_crank_signal(void)
-{
-    trigger_signal_message_queue_id = CoCreateQueue((void * *)&trigger_signal_queue, NUM_TRIGGER_SIGNALS, EVENT_SORT_TYPE_FIFO);
-    trigger_context = trigger_36_1_init();
-
-    init_crank_trigger_signal_list();
-
-    CoCreateTask(trigger_signal_task, 
-                 &trigger_signal_message_queue_id, 
-                 1, 
-                 &trigger_signal_task_stack[TRIGGER_SIGNAL_TASK_STACK_SIZE - 1], 
-                 TRIGGER_SIGNAL_TASK_STACK_SIZE);
-
-
-    /* Set variables used */
-    GPIO_InitTypeDef GPIO_InitStruct;
-    EXTI_InitTypeDef EXTI_InitStruct;
-    NVIC_InitTypeDef NVIC_InitStruct;
-
-    /* Enable clock for GPIOA */
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
-    /* Enable clock for SYSCFG */
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
-
-    /* Set pin as input */
-    GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IN;
-    GPIO_InitStruct.GPIO_OType = GPIO_OType_PP;
-    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_5;
-    GPIO_InitStruct.GPIO_PuPd = GPIO_PuPd_UP;
-    GPIO_InitStruct.GPIO_Speed = GPIO_Speed_100MHz;
-    GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-    /* Tell system that you will use PA5 for EXTI_Line5 */
-    SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOA, EXTI_PinSource5);
-
-    /* PA5 is connected to EXTI_Line5 */
-    EXTI_InitStruct.EXTI_Line = EXTI_Line5;
-    /* Enable interrupt */
-    EXTI_InitStruct.EXTI_LineCmd = ENABLE;
-    /* Interrupt mode */
-    EXTI_InitStruct.EXTI_Mode = EXTI_Mode_Interrupt;
-    /* Triggers on rising and falling edge */
-    EXTI_InitStruct.EXTI_Trigger = EXTI_Trigger_Falling;
-    /* Add to EXTI */
-    EXTI_Init(&EXTI_InitStruct);
-
-    /* Add IRQ vector to NVIC */
     /* PA5 is connected to EXTI_Line5-9, which has EXTI1_IRQn vector */
     NVIC_InitStruct.NVIC_IRQChannel = EXTI9_5_IRQn;
     /* Set priority */
@@ -322,7 +129,22 @@ static void init_crank_signal(void)
     NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
     /* Add to NVIC */
     NVIC_Init(&NVIC_InitStruct);
+    /* Add IRQ vector to NVIC */
+    /* PA0 is connected to EXTI_Line0, which has EXTI0_IRQn vector */
+    NVIC_InitStruct.NVIC_IRQChannel = EXTI0_IRQn;
+    /* Set priority */
+    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0x00;
+    /* Set sub priority */
+    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0x00;
+    /* Enable interrupt */
+    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
+    /* Add to NVIC */
+    NVIC_Init(&NVIC_InitStruct);
 }
+#else
+/* Button GPIO used by crank signal. The function also appears to be enabling interrupts on A5, not A), which is what the button is conected to.
+*/
+#endif
 
 static void init_leds(void)
 {
@@ -380,7 +202,10 @@ void hi_res_tick(void)
     GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
 }
 
-
+void debug_injector_pulse(void)
+{
+    injector_pulse_schedule(injector_1, 100, 1000);
+}
 
 int main(void)
 {
@@ -389,13 +214,13 @@ int main(void)
     init_leds();
     initHiResTimer(1000000, hi_res_tick);
 
-    init_button();
+    //init_button();
 
     timed_events_init(1000000);    
 
     CoInitOS(); /*!< Initialise CoOS */
 
-    init_crank_signal();
+    init_trigger_signals(); /* Done after CoInitOS() as it uses CoOS resources. */
 
     initSerialTask();
     init_pulses();

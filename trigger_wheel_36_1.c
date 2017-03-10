@@ -1,8 +1,10 @@
+#include "trigger_input.h"
 #include "trigger_wheel_36_1.h"
 #include "queue.h"
 #include "rpm_calculator.h"
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #define NUM_TEETH 35
 #define NUM_MISSING_TEETH 1
@@ -14,7 +16,9 @@ typedef enum trigger_wheel_state_t
     trigger_wheel_state_synched
 } trigger_wheel_state_t;
 
-typedef void (*trigger_36_1_state_handler)(trigger_wheel_36_1_context_st * const context, uint32_t const timestamp);
+typedef void (*trigger_36_1_state_handler)(trigger_wheel_36_1_context_st * const context, 
+                                           trigger_signal_source_t trigger_source, 
+                                           uint32_t const timestamp);
 
 typedef void (*event_callback)(float const tooth_angle_btdc, void * const arg);
 typedef struct event_st event_st;
@@ -57,17 +61,26 @@ struct trigger_wheel_36_1_context_st
     rpm_calculator_st * rpm_calculator;
     float rpm;
 
+    bool had_cam_signal; /* Set after receiving a camshaft signal. Indicates next tooth #1 is the start of the 720 degree cycle. */
+    bool second_revolution; /* In second half of the 720 degree cycle. */
+
     CIRCLEQ_HEAD(,tooth_context_st)teeth_queue;
 
 };
 
-static void trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, uint32_t const timestamp);
-static void trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context, uint32_t const timestamp);
+static void trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, 
+                                                    trigger_signal_source_t trigger_source, 
+                                                    uint32_t const timestamp);
+static void trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context,
+                                                trigger_signal_source_t trigger_source, 
+                                                uint32_t const timestamp);
 
 static trigger_wheel_36_1_context_st trigger_wheel_context;
 static float const degrees_per_tooth = 360.0 / TOTAL_TEETH;
 
-static void trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, uint32_t const timestamp)
+static void trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, 
+                                                    trigger_signal_source_t trigger_source, 
+                                                    uint32_t const timestamp)
 {
     tooth_context_st * current_tooth = context->tooth_next;
 
@@ -119,7 +132,9 @@ static void trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_s
     context->tooth_next = CIRCLEQ_NEXT(current_tooth, entry);
 }
 
-static void trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context, uint32_t const timestamp)
+static void trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context, 
+                                                trigger_signal_source_t trigger_source,
+                                                uint32_t const timestamp)
 {
     tooth_context_st * current_tooth = context->tooth_next; 
     tooth_context_st * previous_tooth = CIRCLEQ_PREV(current_tooth, entry);
@@ -171,9 +186,11 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     return context;
 }
 
-void trigger_36_1_handle_pulse(trigger_wheel_36_1_context_st * const context, uint32_t const timestamp)
+void trigger_36_1_handle_pulse(trigger_wheel_36_1_context_st * const context,
+                               trigger_signal_source_t const trigger_source,
+                               uint32_t const timestamp)
 {
-    context->state_hander(context, timestamp);
+    context->state_hander(context, trigger_source, timestamp);
 }
 
 float trigger_36_1_rpm_get(trigger_wheel_36_1_context_st * const context)

@@ -117,7 +117,7 @@ static void handleNewSerialData( void )
                         uint32_t rpm_32 = rpm;
 
                         //printf("rpm: %f\r\n", rpm);
-                        printf("rpm_32: %u\r\n", rpm_32);
+                        printf("rpm_32: %"PRIu32"\r\n", rpm_32);
                     }
                     if (ch == 'm')
                     {
