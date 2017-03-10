@@ -22,6 +22,8 @@
 /*---------------------------- Include ---------------------------------------*/
 #include <stdio.h>
 #include <CoOS.h>
+#include <OsArch.h>
+
 #include "stm32f4xx.h"
 #include "stm32f4xx_gpio.h"
 #include <stm32f4xx_tim.h>
@@ -38,6 +40,7 @@
 
 #include "hi_res_timer.h"
 #include "serial_task.h"
+#include "queue.h"
 
 #include <math.h>
 
@@ -45,14 +48,34 @@
 #define STACK_SIZE_TASKC 1024              /*!< Define "taskC" task size */
 #define STACK_SIZE_TASKD 1024              /*!< Define "taskD" task size */
 
+
+typedef struct trigger_signal_st
+{
+    STAILQ_ENTRY(trigger_signal_st) entry;
+
+    uint32_t timestamp;
+} trigger_signal_st;
+
 /* Private typedef -----------------------------------------------------------*/
-GPIO_InitTypeDef GPIO_InitStructure;
+
 /*---------------------------- Variable Define -------------------------------*/
+GPIO_InitTypeDef GPIO_InitStructure;
 static __attribute((aligned(8))) OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define "taskC" task stack */
 static __attribute((aligned(8))) OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
 
+#define TRIGGER_SIGNAL_TASK_STACK_SIZE 1024
+static __attribute((aligned(8))) OS_STK trigger_signal_task_stack[TRIGGER_SIGNAL_TASK_STACK_SIZE]; /*!< Define "taskD" task stack */
+
 static injector_output_st * injector_1;
 static ignition_output_st * ignition_1; 
+
+#define NUM_TRIGGER_SIGNALS 15
+static trigger_signal_st trigger_signals[NUM_TRIGGER_SIGNALS];
+static trigger_signal_st * trigger_signal_queue[NUM_TRIGGER_SIGNALS];
+OS_EventID trigger_signal_message_queue_id; 
+
+
+static STAILQ_HEAD(, trigger_signal_st) trigger_signal_free_list;
 
 static void common_thread_task(char const * const task_name, 
                                unsigned int gpio_pin, 
@@ -66,6 +89,29 @@ static void common_thread_task(char const * const task_name,
     }
 }
 
+static trigger_signal_st * trigger_signal_get(void)
+{
+    /* This function is called from within an IRQ. Entries are placed back into the queue with interrupts disabled.
+    */
+    trigger_signal_st * const trigger_signal = STAILQ_FIRST(&trigger_signal_free_list);
+
+    if (trigger_signal != NULL)
+    {
+        STAILQ_REMOVE_HEAD(&trigger_signal_free_list, entry);
+    }
+
+    return trigger_signal;
+}
+
+static void trigger_signal_put(trigger_signal_st * const trigger_signal)
+{
+    IRQ_DISABLE_SAVE();
+
+    STAILQ_INSERT_TAIL(&trigger_signal_free_list, trigger_signal, entry);
+
+    IRQ_ENABLE_RESTORE();
+}
+
 /* Handle PA0 interrupt */
 void EXTI0_IRQHandler(void) {
     /* Make sure that interrupt flag is set */
@@ -73,9 +119,22 @@ void EXTI0_IRQHandler(void) {
         /* Clear interrupt flag */
 
         EXTI_ClearITPendingBit(EXTI_Line0);
-        if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0) == Bit_SET)
+
+        /* TODO: configurable edge? */
+        if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0) == Bit_RESET) /* Trigger on fallig edge. */
         {
-            injector_pulse_schedule(injector_1, 100, 3000);
+            trigger_signal_st * const trigger_signal = trigger_signal_get();
+
+            if (trigger_signal != NULL)
+            {
+                trigger_signal->timestamp = hi_res_counter_val();
+
+                CoEnterISR();
+
+                isr_PostQueueMail(trigger_signal_message_queue_id, trigger_signal);
+
+                CoExitISR();
+            }
         }
 
         /* Do your stuff when PA0 is changed */
@@ -142,8 +201,60 @@ static void init_button(void)
     NVIC_Init(&NVIC_InitStruct);
 }
 
+static void init_crank_trigger_signal_list(void)
+{
+    size_t index;
+
+    STAILQ_INIT(&trigger_signal_free_list); 
+    for (index = 0; index < NUM_TRIGGER_SIGNALS; index++)
+    {
+        trigger_signal_st * const trigger_signal = &trigger_signals[index];
+
+        STAILQ_INSERT_TAIL(&trigger_signal_free_list, trigger_signal, entry);
+    }
+}
+
+void trigger_signal_task(void * pdata)
+{
+    unsigned int tooth = 0;
+    OS_EventID message_queue_id = *(OS_EventID *)pdata;
+
+    while (1)
+    {
+        StatusType err;
+        trigger_signal_st * trigger_signal;
+        uint32_t timestamp;
+
+        trigger_signal =  CoPendQueueMail(message_queue_id, 0, &err);
+
+        timestamp = trigger_signal->timestamp;
+
+        trigger_signal_put(trigger_signal);
+
+        /* TODO: handle trigger signals properly. */
+
+        tooth++;
+        if (tooth == 35)
+        {
+            tooth = 0;
+            injector_pulse_schedule(injector_1, 100, 3000); 
+        }
+    }
+}
+
 static void init_crank_signal(void)
 {
+    trigger_signal_message_queue_id = CoCreateQueue((void * *)&trigger_signal_queue, NUM_TRIGGER_SIGNALS, EVENT_SORT_TYPE_FIFO);
+
+    init_crank_trigger_signal_list();
+
+    CoCreateTask(trigger_signal_task, 
+                 &trigger_signal_message_queue_id, 
+                 1, 
+                 &trigger_signal_task_stack[TRIGGER_SIGNAL_TASK_STACK_SIZE - 1], 
+                 TRIGGER_SIGNAL_TASK_STACK_SIZE);
+
+
     /* Set variables used */
     GPIO_InitTypeDef GPIO_InitStruct;
     EXTI_InitTypeDef EXTI_InitStruct;
@@ -255,11 +366,12 @@ int main(void)
     initHiResTimer(1000000, hi_res_tick);
 
     init_button();
-    init_crank_signal();
 
     timed_events_init(1000000);    
 
     CoInitOS(); /*!< Initialise CoOS */
+
+    init_crank_signal();
 
     initSerialTask();
     init_pulses();

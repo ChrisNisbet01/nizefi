@@ -253,7 +253,7 @@ Enable(1) or disable(0) queue management.
 Max number of queue.(less than CFG_MAX_EVENT).
 */
 #if	CFG_QUEUE_EN >0
-#define CFG_MAX_QUEUE           (2)
+#define CFG_MAX_QUEUE           (5)
 #endif   // CFG_QUEUE_EN
 
 #endif   // CFG_EVENT_EN

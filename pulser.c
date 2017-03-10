@@ -214,7 +214,7 @@ void init_pulses(void)
 {
     size_t index;
 
-    CoCreateTask(pulser_task, 0, 1, &pulser_stk[STACK_SIZE_PULSER - 1], STACK_SIZE_PULSER);
+    CoCreateTask(pulser_task, 0, 2, &pulser_stk[STACK_SIZE_PULSER - 1], STACK_SIZE_PULSER);
 
     for (index = 0; index < NUM_PULSERS; index++)
     {
