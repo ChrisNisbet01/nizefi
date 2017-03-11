@@ -71,18 +71,6 @@ static void common_thread_task(char const * const task_name,
     }
 }
 
-void EXTI9_5_IRQHandler(void)
-{
-    /* Make sure that interrupt flag is set */
-    if (EXTI_GetITStatus(EXTI_Line5) != RESET) {
-        /* Clear interrupt flag */
-        EXTI_ClearITPendingBit(EXTI_Line5);
-
-        /* Do your stuff when PA0 is changed */
-        //GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
-    }
-}
-
 #if 0
 static void init_button(void)
 {
