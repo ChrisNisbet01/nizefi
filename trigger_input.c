@@ -256,6 +256,16 @@ float rpm_get(void)
     return trigger_36_1_rpm_get(trigger_context);
 }
 
+float crank_angle_get(void)
+{
+    return trigger_36_1_crank_angle_get(trigger_context);
+}
+
+float engine_cycle_angle_get(void)
+{
+    return trigger_36_1_engine_cycle_angle_get(trigger_context);
+}
+
 void trigger_input_task(void * pdata)
 {
     unsigned int tooth = 0;
@@ -373,6 +383,15 @@ static void initialise_crank_trigger_gpio(void)
     configure_gpio_external_irq(gpio_config);
 }
 
+static void initialise_cam_trigger_gpio(void)
+{
+    trigger_gpio_config_st const * const gpio_config = &cam_trigger_gpio_config;
+
+    configure_gpio_pin(gpio_config);
+
+    configure_gpio_external_irq(gpio_config);
+}
+
 void init_trigger_signals(void)
 {
     /* Setup crankshaft and camshaft trigger inputs. Currently 
@@ -401,5 +420,6 @@ void init_trigger_signals(void)
                  TRIGGER_SIGNAL_TASK_STACK_SIZE);
 
     initialise_crank_trigger_gpio();
+    initialise_cam_trigger_gpio();
 }
 

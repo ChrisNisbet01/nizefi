@@ -32,13 +32,20 @@ static gpio_config_st const injector_gpios[] =
         .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
         .port = GPIOD,
         .pin = GPIO_Pin_13
+    },
+    {
+        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
+        .port = GPIOD,
+        .pin = GPIO_Pin_14
+    },
+    {
+        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
+        .port = GPIOD,
+        .pin = GPIO_Pin_15
     }
 };
 #define NUM_INJECTOR_GPIOS (sizeof injector_gpios / sizeof injector_gpios[0])
 
-/* Temp debug just use a couple of LED pins. Ignition will use 
- * the other couple. 
- */
 static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
 {
     [injector_1_index] =
@@ -49,6 +56,15 @@ static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
     [injector_2_index] =
     {
         .gpio_config = &injector_gpios[injector_2_index]
+    }
+    ,
+    [injector_3_index] =
+    {
+        .gpio_config = &injector_gpios[injector_3_index]
+    },
+    [injector_3_index] =
+    {
+        .gpio_config = &injector_gpios[injector_4_index]
     }
 };
 static size_t next_injector_output;
