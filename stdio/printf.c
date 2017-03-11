@@ -9,7 +9,7 @@
 #include <stdarg.h>
 #include "usart.h"
 #include "stm32f4xx_usart.h"
-
+#include <math.h>
 
 /**
  * @brief  Transmit a char, if you want to use printf(),
@@ -31,8 +31,8 @@ void PrintChar(char c)
 
 /** Required for proper compilation. */
 //struct _reent r = {0, (FILE *) 0, (FILE *) 1, (FILE *) 0, 0};
-struct _reent r = {._inc = 0};
-struct _reent *_impure_ptr = &r;
+//struct _reent r = {._inc = 0};
+//struct _reent *_impure_ptr = &r;
 
 /**
  * @brief  Writes a character inside the given string. Returns 1.
@@ -234,7 +234,7 @@ int ftoa(float n, char *res, int afterpoint)
     float fpart = n - (float)ipart;
  
     // convert integer part to string
-    int i = intToStr(ipart, res, 0);
+    int i = intToStr(ipart, res, 1);
  
     // check for display option after point
     if (afterpoint != 0)
@@ -325,6 +325,144 @@ signed int PutHexa(
 
 /* Global Functions ----------------------------------------------------------- */
 
+#define IS_DOUBLE_WORD_ALIGNED(x) ((x) & 1)
+
+static signed int local_vsnprintf(int isDoubleWordAligned, char * pStr, size_t length, const char * pFormat, va_list ap)
+{
+    char          fill;
+    unsigned char width;
+    signed int    num = 0;
+    size_t    size = 0;
+
+    /* Clear the string */
+    if (pStr)
+    {
+
+        *pStr = 0;
+    }
+
+    /* Phase string */
+    while (*pFormat != 0 && size < length)
+    {
+
+        /* Normal character */
+        if (*pFormat != '%')
+        {
+
+            *pStr++ = *pFormat++;
+            size++;
+        }
+        /* Escaped '%' */
+        else if (*(pFormat + 1) == '%')
+        {
+
+            *pStr++ = '%';
+            pFormat += 2;
+            size++;
+        }
+        /* Token delimiter */
+        else
+        {
+
+            fill = ' ';
+            width = 0;
+            pFormat++;
+
+            /* Parse filler */
+            if (*pFormat == '0')
+            {
+
+                fill = '0';
+                pFormat++;
+            }
+
+            /* Parse width */
+            while ((*pFormat >= '0') && (*pFormat <= '9'))
+            {
+
+                width = (width * 10) + *pFormat - '0';
+                pFormat++;
+            }
+
+            /* Check if there is enough space */
+            if (size + width > length)
+            {
+
+                width = length - size;
+            }
+
+            if (*pFormat == 'l')
+            {
+                pFormat++;
+            }
+
+            /* Parse type */
+            switch (*pFormat)
+            {
+                case 'd':
+                case 'i':
+                    num = PutSignedInt(pStr, fill, width, va_arg(ap, signed int)); isDoubleWordAligned++; break;
+                case 'u':
+                    num = PutUnsignedInt(pStr, fill, width, va_arg(ap, unsigned int)); isDoubleWordAligned++; break;
+                case 'p':
+                case 'x':
+                    num = PutHexa(pStr, fill, width, 0, va_arg(ap, unsigned int)); isDoubleWordAligned++; break;
+                case 'X':
+                    num = PutHexa(pStr, fill, width, 1, va_arg(ap, unsigned int)); isDoubleWordAligned++; break;
+                case 's':
+                    num = PutString(pStr, va_arg(ap, char *)); isDoubleWordAligned++; break;
+                case 'c':
+                    num = PutChar(pStr, va_arg(ap, unsigned int)); isDoubleWordAligned++; break;
+                case 'f':
+                {
+                    union
+                    {
+                        uint32_t i[2];
+                        double f;
+                    } u;
+                    if (IS_DOUBLE_WORD_ALIGNED(isDoubleWordAligned) == 0)
+                    {
+                        u.i[0] = va_arg(ap, uint32_t);
+                        isDoubleWordAligned++;
+                    }
+                    u.i[0] = va_arg(ap, uint32_t);
+                    u.i[1] = va_arg(ap, uint32_t);
+                    num = PutFloat(pStr, 0, 0, u.f); break;
+                }
+#if 0
+                case 'g':
+                {
+                    float *pf = (float *)va_arg(ap, long);
+                    isDoubleWordAligned++;
+                    num = PutFloat(pStr, *pf);
+                    break;
+                }
+#endif
+                default:
+                    return -1;
+            }
+
+            pFormat++;
+            pStr += num;
+            size += num;
+        }
+    }
+
+    /* NUL terminated (final '\0' is not counted) */
+    if (size < length)
+    {
+
+        *pStr = '\0';
+    }
+    else
+    {
+
+        *(--pStr) = '\0';
+        size--;
+    }
+
+    return size;
+}
 
 /**
  * @brief  Stores the result of a formatted string into another string. Format
@@ -339,106 +477,7 @@ signed int PutHexa(
  */
 signed int vsnprintf(char *pStr, size_t length, const char *pFormat, va_list ap)
 {
-    char          fill;
-    unsigned char width;
-    signed int    num = 0;
-    size_t size = 0;
-
-    /* Clear the string */
-    if (pStr) {
-
-        *pStr = 0;
-    }
-
-    /* Phase string */
-    while (*pFormat != 0 && size < length) {
-
-        /* Normal character */
-        if (*pFormat != '%') {
-
-            *pStr++ = *pFormat++;
-            size++;
-        }
-        /* Escaped '%' */
-        else if (*(pFormat+1) == '%') {
-
-            *pStr++ = '%';
-            pFormat += 2;
-            size++;
-        }
-        /* Token delimiter */
-        else {
-
-            fill = ' ';
-            width = 0;
-            pFormat++;
-
-            /* Parse filler */
-            if (*pFormat == '0') {
-
-                fill = '0';
-                pFormat++;
-            }
-
-            /* Parse width */
-            while ((*pFormat >= '0') && (*pFormat <= '9')) {
-
-                width = (width*10) + *pFormat-'0';
-                pFormat++;
-            }
-
-            /* Check if there is enough space */
-            if (size + width > length) {
-
-                width = length - size;
-            }
-
-            /* Parse type */
-            switch (*pFormat) {
-            case 'd':
-            case 'i': num = PutSignedInt(pStr, fill, width, va_arg(ap, signed int)); break;
-            case 'u': num = PutUnsignedInt(pStr, fill, width, va_arg(ap, unsigned int)); break;
-            case 'x': num = PutHexa(pStr, fill, width, 0, va_arg(ap, unsigned int)); break;
-            case 'X': num = PutHexa(pStr, fill, width, 1, va_arg(ap, unsigned int)); break;
-            case 'p':
-                num = PutHexa(pStr, fill, width, 1, va_arg(ap, unsigned int)); break;
-            case 's':
-                num = PutString(pStr, va_arg(ap, char *)); break;
-            case 'c': num = PutChar(pStr, va_arg(ap, unsigned int)); break;
-            case 'f':
-            {
-                union
-                {
-                    uint32_t i[2];
-                    double f;
-                } u;
-                u.i[0] = va_arg(ap, uint32_t);
-                u.i[1] = va_arg(ap, uint32_t);
-                num = PutFloat(pStr, 0, width, u.f); break;
-            }
-                break;
-            default:
-                return EOF;
-            }
-
-            pFormat++;
-            pStr += num;
-            size += num;
-        }
-    }
-
-    /* NULL-terminated (final \0 is not counted) */
-    if (size < length) {
-
-        *pStr = 0;
-    }
-    else {
-
-        *(--pStr) = 0;
-        size--;
-    }
-
-    return size;
+    return local_vsnprintf(0, pStr, length, pFormat, ap);
 }
 
 

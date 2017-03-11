@@ -129,7 +129,7 @@ static void handleNewSerialData( void )
                         float const crank_angle = crank_angle_get();
                         uint32_t crank_angle_32 = crank_angle;
 
-                        printf("crank: %"PRIu32"\r\n", crank_angle_32);
+                        printf("crank: %f %"PRIu32"\r\n", crank_angle, crank_angle_32);
                     }
                     if (ch == 'e')
                     {
@@ -137,7 +137,7 @@ static void handleNewSerialData( void )
                         float const engine_cycle_angle = engine_cycle_angle_get();
                         uint32_t engine_cycle_angle_32 = engine_cycle_angle;
 
-                        printf("engine: %"PRIu32"\r\n", engine_cycle_angle_32);
+                        printf("engine: %"PRIu32" %f\r\n", engine_cycle_angle_32, engine_cycle_angle);
                     }
                 }
 			}
