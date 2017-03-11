@@ -4,6 +4,8 @@
 #include "rpm_calculator.h"
 #include "leds.h"
 
+#include <coocox.h>
+
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -25,7 +27,7 @@ typedef struct event_st event_st;
 
 struct event_st
 {
-    event_callback user_callback; /* user callback*/
+    event_callback user_callback; /* user callback */
     void * user_arg;
 };
 
@@ -33,14 +35,12 @@ typedef struct tooth_context_st
 {
     CIRCLEQ_ENTRY(tooth_context_st) entry; 
 
-    uint32_t dummy; /* FIXME - Without this, the device crashes. Alignment thing? Buffer overrun? Memory stomp? */
-
     uint32_t last_timestamp;
     uint32_t last_delta; /* Difference in timestamp between this tooth and the previous timestamp.
                             Valid only if pulse_counter > 1.
                           */
     float crank_angle; /* Retain this information for each tooth. It may vary depending on the configuration of the tooth #1 offset.*/
-    float engine_cycle_angle; /* Retain this information for each tooth. It may vary depending on the configuration of the tooth #1 offset.*/
+    int index; 
 
     event_st event;
 
@@ -60,6 +60,7 @@ struct trigger_wheel_36_1_context_st
     tooth_context_st * tooth_1; /* When synched, this point to the entry for tooth #1, 
                                     which is the tooth after the missing tooth. 
                                  */
+    int out_by;
     tooth_context_st * tooth_next;
 
     rpm_calculator_st * rpm_calculator;
@@ -69,13 +70,13 @@ struct trigger_wheel_36_1_context_st
     bool second_revolution; /* In second half of the 720 degree cycle. */
 
     float tooth_1_crank_angle; /* -ve indicates BTDC, +ve indicates after TDC. */
-    unsigned int tooth_number;
-    unsigned int max_tooth_number;
+    unsigned int tooth_number; /* Note - Starts at 1.*/
     float crank_angle;
     float engine_cycle_angle;
 
-    CIRCLEQ_HEAD(,tooth_context_st)teeth_queue;
+    CIRCLEQ_HEAD(,tooth_context_st) teeth_queue;
 
+    OS_MutexID teeth_mutex;
 };
 
 static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, 
@@ -89,13 +90,85 @@ static void cam_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_s
 
 static trigger_wheel_36_1_context_st trigger_wheel_context;
 static float const degrees_per_tooth = 360.0 / TOTAL_TEETH;
-static unsigned int crank_angles[NUM_TEETH + 1] =
+static unsigned int crank_angles[NUM_TEETH] =
 {
     0, 10, 20, 30, 40, 50, 60, 70, 80, 90,
     100, 110, 120, 130, 140, 150, 160, 170, 180,
     190, 200, 210, 220, 230, 240, 250, 260, 270,
-    280, 290, 300, 310, 320, 330, 340, 0
+    280, 290, 300, 310, 320, 330, 340
 };
+
+/* Cripes. This CIRCLEQ implementation will return a pointer to 
+ * the list head, not just entries in the list. 
+ */
+tooth_context_st * previous_tooth_get(trigger_wheel_36_1_context_st * const context, tooth_context_st * const tooth)
+{
+    tooth_context_st * previous;
+
+    previous = CIRCLEQ_PREV(tooth, entry);
+    if (previous == (void *)&context->teeth_queue)
+    {
+        previous = CIRCLEQ_PREV(previous, entry);
+    }
+
+    return previous;
+}
+
+tooth_context_st * next_tooth_get(trigger_wheel_36_1_context_st * const context, tooth_context_st * const tooth)
+{
+    tooth_context_st * next;
+
+    next = CIRCLEQ_NEXT(tooth, entry);
+    if (next == (void *)&context->teeth_queue)
+    {
+        next = CIRCLEQ_NEXT(next, entry);
+    }
+
+    return next;
+}
+
+static float normalise_angle(float const angle_in, float const maximum_angle)
+{
+    float angle = angle_in;
+
+    if (angle < 0.0)
+    {
+        angle += 360.0;
+    }
+    else if (angle >= maximum_angle)
+    {
+        angle -= 360.0;
+    }
+
+    return angle;
+}
+
+static float normalise_crank_angle(float const crank_angle)
+{
+    return normalise_angle(crank_angle, 360.0);
+}
+
+/* XXX Only needs to be done once when the trigger wheel is 
+ * synched. 
+ * The engine_cycle angle can be determined when needed by 
+ * adding 360 degrees if in the second cycle. Beware of race 
+ * when doing this. 
+ */
+static void update_engine_angles(trigger_wheel_36_1_context_st * const context)
+{
+    size_t index;
+    tooth_context_st * tooth = context->tooth_1; 
+
+    for (index = 0; index < NUM_TEETH; index++, tooth = next_tooth_get(context, tooth));
+    {
+        float angle;
+
+        /* Work out crank angle. */
+        angle = normalise_crank_angle(crank_angles[index] + context->tooth_1_crank_angle);
+
+        tooth->crank_angle = angle;
+    }
+}
 
 static void set_unsynched(trigger_wheel_36_1_context_st * const context)
 {
@@ -114,6 +187,7 @@ static void set_synched(trigger_wheel_36_1_context_st * const context)
     context->cam_trigger_state_hander = cam_trigger_wheel_state_synched_handler;
     context->had_cam_signal = false; /* Still need a cam signal to know which half of the cycle the engine is in.
                                       */
+    update_engine_angles(context);
 }
 
 static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, 
@@ -130,7 +204,7 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
     }
     else if (context->pulse_counter == 2)
     {
-        tooth_context_st * previous_tooth = CIRCLEQ_PREV(current_tooth, entry);
+        tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
 
         current_tooth->last_delta = timestamp - previous_tooth->last_timestamp;
         /* Not much else that can be done until another trigger signal 
@@ -139,8 +213,8 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
     }
     else
     {
-        tooth_context_st * previous_tooth = CIRCLEQ_PREV(current_tooth, entry);
-        tooth_context_st * previous_prevous_tooth = CIRCLEQ_PREV(current_tooth, entry);
+        tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
+        tooth_context_st * previous_prevous_tooth = previous_tooth_get(context, previous_tooth);
 
         current_tooth->last_delta = timestamp - previous_tooth->last_timestamp;
         if ((current_tooth->last_delta < ((previous_tooth->last_delta * 7) / 10)))
@@ -165,13 +239,15 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
             /* Time between signals is about what we expect for a skip 
              * tooth. That would make this tooth #1.
              */
-            context->tooth_1 = current_tooth;
+            context->tooth_1 = current_tooth; /* Set to previous tooth because the next tooth is */
             context->tooth_number = 1;
-            set_synched(context); 
+            set_synched(context);
         }
     }
 
-    context->tooth_next = CIRCLEQ_NEXT(current_tooth, entry);
+    context->tooth_next = next_tooth_get(context, current_tooth);
+
+    return;
 }
 
 static void cam_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context,
@@ -180,86 +256,42 @@ static void cam_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_conte
     context->had_cam_signal = true;
 }
 
-static float normalise_angle(float const angle_in, float const maximum_angle)
-{
-    float angle = angle_in;
-
-    if (angle < 0.0)
-    {
-        angle += 360.0;
-    }
-    else if (angle >= maximum_angle)
-    {
-        angle -= 360.0;
-    }
-
-    return angle;
-}
-
-static float normalise_crank_angle(float const crank_angle)
-{
-    return normalise_angle(crank_angle, 360.0);
-}
-
-static void update_engine_angles(trigger_wheel_36_1_context_st * const context)
-{
-    tooth_context_st * current_tooth = context->tooth_next; 
-    float angle;
-    unsigned int tooth_index = context->tooth_number - 1;
-
-    if (tooth_index >= NUM_TEETH + 1)
-    {
-        GPIO_ToggleBits(GPIOD, BLUE_LED);
-    }
-
-    /* Work out crank angle. */
-    angle = normalise_crank_angle(crank_angles[tooth_index] + context->tooth_1_crank_angle);
-
-    context->crank_angle = angle;
-    //current_tooth->crank_angle = angle;
-
-    if (context->second_revolution)
-    {
-        angle += 360.0;
-    }
-    
-    context->engine_cycle_angle = angle;
-    //current_tooth->engine_cycle_angle = angle;
-}
-
 static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context,
                                                       uint32_t const timestamp)
 {
     tooth_context_st * current_tooth = context->tooth_next; 
-    tooth_context_st * previous_tooth = CIRCLEQ_PREV(current_tooth, entry);
+    tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
     uint32_t const last_revolution_timestamp = current_tooth->last_timestamp;
+    unsigned int tooth_number;
 
     context->pulse_counter++;
-    context->tooth_number++;
-    if (context->tooth_number > context->max_tooth_number)
-    {
-        context->max_tooth_number = context->tooth_number;
-    }
     current_tooth->last_timestamp = timestamp;
     current_tooth->last_delta = timestamp - previous_tooth->last_timestamp;
 
-    update_engine_angles(context);
+    CoEnterMutexSection(context->teeth_mutex);
+
+    tooth_number = context->tooth_number + 1;
+    if (tooth_number == NUM_TEETH + 1)
+    {
+        tooth_number = 1;
+        context->second_revolution = !context->had_cam_signal;
+        context->had_cam_signal = false;
+        context->revolution_counter++;
+    }
+    context->tooth_number = tooth_number;
+    context->tooth_next = next_tooth_get(context, current_tooth); 
+
+    CoLeaveMutexSection(context->teeth_mutex); 
 
     /* It is expected that the cam signal arrives some time just 
      * before tooth #1. 
      */
     /* TODO: Validate time deltas between teeth. 
      */
-    if (current_tooth == context->tooth_1)
+    if (context->tooth_number == 1)
     {
         uint32_t rotation_time_32 = timestamp - last_revolution_timestamp;
         float const rotation_time = (float)rotation_time_32 / 1000000;
-
-        /* Just found tooth #1. */
-
-        context->tooth_number = 1;
-        context->second_revolution = !context->had_cam_signal;
-        context->had_cam_signal = false;
 
         if (!context->second_revolution)
         {
@@ -272,10 +304,7 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
          * 3000, and  four times/rev below 1000 rpm. 
          */
         rpm_calculator_update(context->rpm_calculator, rotation_time, 1.0);
-        context->revolution_counter++;
     }
-
-    context->tooth_next = CIRCLEQ_NEXT(current_tooth, entry);
 }
 
 static void cam_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context,
@@ -290,8 +319,9 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     size_t index;
 
     context->tooth_1_crank_angle = 0.0; /* TODO: Configurable. */
-    context->max_tooth_number = 0;
+
     set_unsynched(context);
+    context->teeth_mutex = CoCreateMutex();
 
     context->revolution_counter = 0;
 
@@ -300,6 +330,7 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     {
         tooth_context_st * const tooth_context = &context->tooth_contexts[index];
 
+        tooth_context->index = index;
         CIRCLEQ_INSERT_TAIL(&context->teeth_queue, tooth_context, entry);
     }
     context->tooth_next = CIRCLEQ_FIRST(&context->teeth_queue);
@@ -334,29 +365,40 @@ float trigger_36_1_rpm_get(trigger_wheel_36_1_context_st * const context)
 
 float trigger_36_1_crank_angle_get(trigger_wheel_36_1_context_st * const context)
 {
-    tooth_context_st * current_tooth = context->tooth_next;
-    tooth_context_st * previous_tooth = CIRCLEQ_PREV(current_tooth, entry); 
-    //float crank_angle = previous_tooth->crank_angle;
-    float crank_angle = context->crank_angle; 
+    float crank_angle = normalise_crank_angle((float)crank_angles[context->tooth_number - 1] + context->tooth_1_crank_angle);
 
     /* TODO: Account for time elapsed since this tooth was 
      * encountered. 
      */
-
     return crank_angle;
 }
 
 float trigger_36_1_engine_cycle_angle_get(trigger_wheel_36_1_context_st * const context)
 {
-    tooth_context_st * current_tooth = context->tooth_next;
-    tooth_context_st * previous_tooth = CIRCLEQ_PREV(current_tooth, entry);
-    //float engine_cycle_angle = previous_tooth->crank_angle;
-    float engine_cycle_angle = context->engine_cycle_angle; 
+    unsigned int tooth_number;
+    float engine_cycle_angle;
+    bool previous_tooth_in_second_revolution;
+
+    CoEnterMutexSection(context->teeth_mutex);
+
+    tooth_number = context->tooth_number;
+    previous_tooth_in_second_revolution = (context->second_revolution && context->tooth_number != 1)
+        || (!context->second_revolution && context->tooth_number == 1);
+
+    CoLeaveMutexSection(context->teeth_mutex); 
+
+    engine_cycle_angle = normalise_crank_angle((float)crank_angles[tooth_number - 1] + context->tooth_1_crank_angle);
+
+    if (previous_tooth_in_second_revolution)
+    {
+        engine_cycle_angle += 360.0;
+    }
+
 
     /* TODO: Account for time elapsed since this tooth was 
      * encountered. 
      */
 
-    //return engine_cycle_angle;
-    return context->max_tooth_number;
+    return engine_cycle_angle;
 }
+
