@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <inttypes.h>
 
 #define NUM_TEETH 35
 #define NUM_MISSING_TEETH 1
@@ -367,8 +368,6 @@ float trigger_36_1_angle_get(trigger_wheel_36_1_context_st * const context, bool
 {
     unsigned int tooth_number;
     float crank_angle;
-    float const rpm = rpm_calculator_smoothed_rpm_get(context->rpm_calculator);
-    float const degrees_per_second = 360.0 * rpm / 60.0;
     uint32_t us_since_tooth_passed;
     uint32_t tooth_timestamp;
     uint32_t time_now;
@@ -386,8 +385,7 @@ float trigger_36_1_angle_get(trigger_wheel_36_1_context_st * const context, bool
 
     time_now = hi_res_counter_val();
     us_since_tooth_passed = time_now - tooth_timestamp;
-    degrees_since_tooth_passed = degrees_per_second * us_since_tooth_passed / 1000000.0;
-
+    degrees_since_tooth_passed = rpm_calcuator_get_degrees_turned(context->rpm_calculator, (float)us_since_tooth_passed / 1000000.0);
     crank_angle = normalise_crank_angle((float)crank_angles[tooth_number - 1] + context->tooth_1_crank_angle + degrees_since_tooth_passed);
 
     if (engine_angle && previous_tooth_in_second_revolution)
