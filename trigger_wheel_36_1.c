@@ -71,6 +71,7 @@ struct trigger_wheel_36_1_context_st
 
     float tooth_1_crank_angle; /* -ve indicates BTDC, +ve indicates after TDC. */
     unsigned int tooth_number; /* Note - Starts at 1.*/
+    uint32_t timestamp; /* timestamp taken when the lat tooth was processed. */
     float crank_angle;
     float engine_cycle_angle;
 
@@ -161,12 +162,8 @@ static void update_engine_angles(trigger_wheel_36_1_context_st * const context)
 
     for (index = 0; index < NUM_TEETH; index++, tooth = next_tooth_get(context, tooth));
     {
-        float angle;
-
         /* Work out crank angle. */
-        angle = normalise_crank_angle(crank_angles[index] + context->tooth_1_crank_angle);
-
-        tooth->crank_angle = angle;
+        tooth->crank_angle = 11.0 + index + normalise_crank_angle((float)crank_angles[index] + context->tooth_1_crank_angle);
     }
 }
 
@@ -225,6 +222,7 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
              */
             context->tooth_1 = previous_tooth;
             context->tooth_number = 2;
+            context->timestamp = timestamp;
             set_synched(context);
         }
         else if ((current_tooth->last_delta < ((previous_tooth->last_delta * 18) / 10))
@@ -241,6 +239,7 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
              */
             context->tooth_1 = current_tooth; /* Set to previous tooth because the next tooth is */
             context->tooth_number = 1;
+            context->timestamp = timestamp;
             set_synched(context);
         }
     }
@@ -270,6 +269,7 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
 
     CoEnterMutexSection(context->teeth_mutex);
 
+    context->timestamp = timestamp;
     tooth_number = context->tooth_number + 1;
     if (tooth_number == NUM_TEETH + 1)
     {
@@ -363,42 +363,48 @@ float trigger_36_1_rpm_get(trigger_wheel_36_1_context_st * const context)
     return rpm_calculator_smoothed_rpm_get(context->rpm_calculator);
 }
 
-float trigger_36_1_crank_angle_get(trigger_wheel_36_1_context_st * const context)
-{
-    float crank_angle = normalise_crank_angle((float)crank_angles[context->tooth_number - 1] + context->tooth_1_crank_angle);
-
-    /* TODO: Account for time elapsed since this tooth was 
-     * encountered. 
-     */
-    return crank_angle;
-}
-
-float trigger_36_1_engine_cycle_angle_get(trigger_wheel_36_1_context_st * const context)
+float trigger_36_1_angle_get(trigger_wheel_36_1_context_st * const context, bool const engine_angle)
 {
     unsigned int tooth_number;
-    float engine_cycle_angle;
+    float crank_angle;
+    float const rpm = rpm_calculator_smoothed_rpm_get(context->rpm_calculator);
+    float const degrees_per_second = 360.0 * rpm / 60.0;
+    uint32_t us_since_tooth_passed;
+    uint32_t tooth_timestamp;
+    uint32_t time_now;
+    float degrees_since_tooth_passed;
     bool previous_tooth_in_second_revolution;
 
     CoEnterMutexSection(context->teeth_mutex);
 
+    tooth_timestamp = context->timestamp;
     tooth_number = context->tooth_number;
     previous_tooth_in_second_revolution = (context->second_revolution && context->tooth_number != 1)
-        || (!context->second_revolution && context->tooth_number == 1);
+        || (!context->second_revolution && context->tooth_number == 1); 
 
-    CoLeaveMutexSection(context->teeth_mutex); 
+    CoLeaveMutexSection(context->teeth_mutex);
 
-    engine_cycle_angle = normalise_crank_angle((float)crank_angles[tooth_number - 1] + context->tooth_1_crank_angle);
+    time_now = hi_res_counter_val();
+    us_since_tooth_passed = time_now - tooth_timestamp;
+    degrees_since_tooth_passed = degrees_per_second * us_since_tooth_passed / 1000000.0;
 
-    if (previous_tooth_in_second_revolution)
+    crank_angle = normalise_crank_angle((float)crank_angles[tooth_number - 1] + context->tooth_1_crank_angle + degrees_since_tooth_passed);
+
+    if (engine_angle && previous_tooth_in_second_revolution)
     {
-        engine_cycle_angle += 360.0;
+        crank_angle += 360.0;
     }
 
+    return crank_angle;
+}
 
-    /* TODO: Account for time elapsed since this tooth was 
-     * encountered. 
-     */
+float trigger_36_1_crank_angle_get(trigger_wheel_36_1_context_st * const context)
+{
+    return trigger_36_1_angle_get(context, false);
+}
 
-    return engine_cycle_angle;
+float trigger_36_1_engine_cycle_angle_get(trigger_wheel_36_1_context_st * const context)
+{
+    return trigger_36_1_angle_get(context, true);
 }
 
