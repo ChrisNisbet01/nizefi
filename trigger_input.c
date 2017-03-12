@@ -59,7 +59,7 @@ OS_EventID trigger_signal_message_queue_id;
  * trigger context and the crank and cam callbacks which are 
  * yet to be supported. 
  */
-trigger_wheel_36_1_context_st * trigger_context;
+static trigger_wheel_36_1_context_st * trigger_context;
 
 typedef STAILQ_HEAD(trigger_signal_list, trigger_signal_st) trigger_signal_list;
 
@@ -392,7 +392,7 @@ static void initialise_cam_trigger_gpio(void)
     configure_gpio_external_irq(gpio_config);
 }
 
-void init_trigger_signals(void)
+void init_trigger_signals(trigger_wheel_36_1_context_st * const trigger_wheel_context)
 {
     /* Setup crankshaft and camshaft trigger inputs. Currently 
      * only doing crankshaft signals. 
@@ -411,7 +411,7 @@ void init_trigger_signals(void)
      * trigger events from this module. Also support enabling and 
      * disabling of the events. 
      */
-    trigger_context = trigger_36_1_init();
+    trigger_context = trigger_wheel_context;
 
     CoCreateTask(trigger_input_task,
                  &trigger_signal_message_queue_id,

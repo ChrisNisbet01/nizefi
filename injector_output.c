@@ -62,7 +62,7 @@ static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
     {
         .gpio_config = &injector_gpios[injector_3_index]
     },
-    [injector_3_index] =
+    [injector_4_index] =
     {
         .gpio_config = &injector_gpios[injector_4_index]
     }

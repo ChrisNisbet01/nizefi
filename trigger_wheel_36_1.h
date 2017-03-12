@@ -1,13 +1,21 @@
 #ifndef __TRIGGER_WHEEL_36_1_H__
 #define __TRIGGER_WHEEL_36_1_H__
 
+typedef struct trigger_wheel_36_1_context_st trigger_wheel_36_1_context_st;
+
 #include "trigger_input.h"
 
 #include <stdint.h>
 
-typedef struct trigger_wheel_36_1_context_st trigger_wheel_36_1_context_st;
+
+typedef void (* trigger_event_callback)(float const tooth_angle_atdc, void * const arg); 
 
 trigger_wheel_36_1_context_st * trigger_36_1_init(void);
+
+void trigger_36_1_register_callback(trigger_wheel_36_1_context_st * const context,
+                                    float const engine_degrees,
+                                    trigger_event_callback callback,
+                                    void * const user_arg);
 
 void trigger_36_1_handle_crank_pulse(trigger_wheel_36_1_context_st * const context, 
                                uint32_t const timestamp);

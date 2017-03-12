@@ -37,7 +37,8 @@
 #include "pulser.h"
 #include "injector_output.h"
 #include "ignition_output.h"
-
+#include "trigger_wheel_36_1.h"
+#include "leds.h"
 #include "hi_res_timer.h"
 #include "serial_task.h"
 #include "queue.h"
@@ -57,7 +58,11 @@ static __attribute((aligned(8))) OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define
 static __attribute((aligned(8))) OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
 
 static injector_output_st * injector_1;
-static ignition_output_st * ignition_1; 
+static injector_output_st * injector_2;
+static injector_output_st * injector_3;
+static injector_output_st * injector_4;
+static ignition_output_st * ignition_1;
+static trigger_wheel_36_1_context_st * trigger_context; 
 
 static void common_thread_task(char const * const task_name, 
                                unsigned int gpio_pin, 
@@ -192,7 +197,16 @@ void hi_res_tick(void)
 
 void debug_injector_pulse(void)
 {
-    injector_pulse_schedule(injector_1, 100, 1000);
+    injector_output_st * const injector = injector_1;
+
+    //injector_pulse_schedule(injector, 100, 1000);
+}
+
+void injector_pulse_callback(float const angle, void * const user_arg)
+{
+    injector_output_st * const injector = user_arg;
+
+    injector_pulse_schedule(injector, 100, 1000);
 }
 
 int main(void)
@@ -208,12 +222,23 @@ int main(void)
 
     CoInitOS(); /*!< Initialise CoOS */
 
-    init_trigger_signals(); /* Done after CoInitOS() as it uses CoOS resources. */
-
     initSerialTask();
+
     init_pulses();
+
     injector_1 = injector_output_get();
+    injector_2 = injector_output_get();
+    injector_3 = injector_output_get();
+    injector_4 = injector_output_get();
     ignition_1 = ignition_output_get();
+
+    trigger_context = trigger_36_1_init();
+    trigger_36_1_register_callback(trigger_context, 0.0, injector_pulse_callback, injector_1);
+    trigger_36_1_register_callback(trigger_context, 180.0, injector_pulse_callback, injector_2);
+    trigger_36_1_register_callback(trigger_context, 360.0, injector_pulse_callback, injector_3);
+    trigger_36_1_register_callback(trigger_context, 540.0, injector_pulse_callback, injector_4);
+
+    init_trigger_signals(trigger_context); /* Done after CoInitOS() as it uses CoOS resources. */
 
     /* Create some dummy tasks */ 
     CoCreateTask(taskC, 0, 3, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
