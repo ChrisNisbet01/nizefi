@@ -387,6 +387,9 @@ static void initialise_crank_trigger_gpio(void)
 
     configure_gpio_pin(gpio_config);
 
+    //configure_gpio_input_capture(handle_crank_trigger_signal);
+    //configure_gpio_input_capture(handle_cam_trigger_signal); 
+
     configure_gpio_external_irq(gpio_config);
 }
 

@@ -190,11 +190,6 @@ void taskD(void * pdata)
     }
 }
 
-void hi_res_tick(void)
-{
-    GPIO_ToggleBits(GPIOD, GPIO_Pin_15);
-}
-
 void debug_injector_pulse(void)
 {
     //injector_output_st * const injector = injector_1;
@@ -216,7 +211,8 @@ int main(void)
     SystemInit();
 
     init_leds();
-    initHiResTimer(1000000, hi_res_tick);
+
+    initHiResTimer(1000000);
 
     //init_button();
 

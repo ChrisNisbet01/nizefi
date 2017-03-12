@@ -4,8 +4,6 @@
 #include <stm32f4xx_tim.h>
 #include <stm32f4xx_rcc.h>
 
-static void (* callback)(void);
-
 #define HIRESTIM			TIM2
 #define HIRESTIM_IRQn		TIM2_IRQn
 #define HIRESTTIM_CLK		RCC_APB1Periph_TIM2
@@ -57,10 +55,6 @@ static void initTimerNVIC(uint_fast8_t irq)
 void HIRESTIM_IRQHandler(void)
 {
     TIM_ClearITPendingBit(HIRESTIM, TIM_IT_Update);
-    if (callback != NULL)
-    {
-        callback();
-    }
 }
 
 uint32_t hi_res_counter_val(void)
@@ -68,9 +62,8 @@ uint32_t hi_res_counter_val(void)
     return HIRESTIM->CNT;
 }
 
-void initHiResTimer(uint32_t periodMicrosecs, void (* appCallback)(void))
+void initHiResTimer(uint32_t periodMicrosecs)
 {
-    callback = appCallback;
     /* enable timer clock */
     RCC_APB1PeriphClockCmd(HIRESTTIM_CLK, ENABLE);
 
