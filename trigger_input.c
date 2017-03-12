@@ -70,11 +70,11 @@ static const trigger_gpio_config_st crank_trigger_gpio_config =
 {
     .RCC_AHBPeriph = RCC_AHB1Periph_GPIOA,
     .port = GPIOA,
-    .pin = GPIO_Pin_0,
+    .pin = GPIO_Pin_5,
     .EXTI_PortSource = EXTI_PortSourceGPIOA,
-    .EXTI_PinSource = EXTI_PinSource0,
-    .EXTI_Line = EXTI_Line0,
-    .NVIC_IRQChannel = EXTI0_IRQn
+    .EXTI_PinSource = EXTI_PinSource5,
+    .EXTI_Line = EXTI_Line5,
+    .NVIC_IRQChannel = EXTI9_5_IRQn
 };
 
 static const trigger_gpio_config_st cam_trigger_gpio_config =
@@ -170,7 +170,7 @@ static void handle_cam_trigger_signal(uint32_t const timestamp)
     }
 }
 
-/* Handle PA0 interrupt */
+/* Handle PA0 interrupt. */
 void EXTI0_IRQHandler(void)
 {
     uint32_t timestamp = hi_res_counter_val();
@@ -195,8 +195,8 @@ void EXTI9_5_IRQHandler(void)
     uint32_t timestamp = hi_res_counter_val();
 
     /* XXX - Need to determine the EXTI_Line to check for some 
-     * other way. Hard-coded assumption that this is for the cam 
-     * is no good. 
+     * other way. Hard-coded assumption that this is for the cam or 
+     * crank is no good. 
      */
 
     /* Make sure that interrupt flag is set */
@@ -206,6 +206,13 @@ void EXTI9_5_IRQHandler(void)
         EXTI_ClearITPendingBit(EXTI_Line6);
 
         handle_cam_trigger_signal(timestamp);
+    }
+    if (EXTI_GetITStatus(EXTI_Line5) != RESET)
+    {
+        /* Clear interrupt flag */
+        EXTI_ClearITPendingBit(EXTI_Line5);
+
+        handle_crank_trigger_signal(timestamp);
     }
 }
 
