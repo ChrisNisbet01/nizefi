@@ -136,7 +136,7 @@ void const * stm32_usart_init(usart_init_st *cfg)
     NVIC_InitTypeDef NVIC_InitStructure;
 
     NVIC_InitStructure.NVIC_IRQChannel = uart_config->irq;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;	// TODO: configurable
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 4;	// TODO: configurable
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 2;			// TODO: configurable
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);

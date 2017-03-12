@@ -262,7 +262,7 @@ static void timer_init(timer_st const * const timer, uint32_t frequency)
 
     /* Enable TIM4 Interrupt */
     NVIC_InitStructure.NVIC_IRQChannel = timer->IRQ_channel;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 4;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
@@ -354,7 +354,9 @@ void timer_channel_schedule_new_event(timer_channel_context_st * const channel, 
     TIM_ClearITPendingBit(TIMx, capture_config->capture_compare_interrupt);
 
     capture_config->TIM_SetCompare(TIMx, (uint16_t)(cnt + delay_us));
-
+    /* Note: Use TIM_GenerateEvent() to generate an event right 
+     * away. 
+     */
     TIM_ITConfig(TIMx, capture_config->capture_compare_interrupt, ENABLE);
 }
 
