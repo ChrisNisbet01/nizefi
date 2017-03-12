@@ -220,6 +220,7 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
             context->tooth_1 = previous_tooth;
             context->tooth_number = 2;
             context->timestamp = timestamp;
+            context->second_revolution = !context->had_cam_signal; 
             set_synched(context);
         }
         else if ((current_tooth->last_delta < ((previous_tooth->last_delta * 18) / 10))
@@ -237,6 +238,7 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
             context->tooth_1 = current_tooth; /* Set to previous tooth because the next tooth is */
             context->tooth_number = 1;
             context->timestamp = timestamp;
+            context->second_revolution = !context->had_cam_signal;
             set_synched(context);
         }
     }
