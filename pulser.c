@@ -7,19 +7,20 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#define NUM_PULSERS 4
+#define STACK_SIZE_PULSER 1024
+#define NUM_PULSERS 16 /* Must be >= number of injectors + number of ignition outputs. */
 
 //#define PULSE_DEBUG
 
-typedef void (* state_handler)(timed_event_context_st * context);
+typedef void (* state_handler)(pulser_st * context);
 
-struct timed_event_context_st
+struct pulser_st
 {
     OS_FlagID flag; /* Used to signal the pulser task to run from the ISR. */
 
     /* ISR level and task level state machine handlers. */
-    state_handler isr_handler;
-    state_handler task_handler;
+    state_handler isr_state_handler;
+    state_handler task_state_handler;
 
     timer_channel_context_st * timer_context;
 
@@ -27,6 +28,14 @@ struct timed_event_context_st
     pulser_callback inactive_callback; 
     void * user_arg;
 
+    /* TODO: Add support for overlapping pulses. It is entirely 
+     * poosible (when engine is highly loaded at high RPM) that 
+     * one pulse could be scheduled when the previous hasn't 
+     * completed. It should _not_ be possible for the new request 
+     * to request a start time before the previous one finishes. 
+     * May need to update the initial delay on the new request to 
+     * account for the delay in starting the timer. 
+     */
     uint_fast16_t active_us; /* The period of time the pulse should be active for. */
 
 #if defined(PULSE_DEBUG)
@@ -38,33 +47,43 @@ struct timed_event_context_st
 #endif
 };
 
-static void timed_event_initial_delay_isr_handler(timed_event_context_st * context);
-static void timed_event_initial_delay_task_handler(timed_event_context_st * context);
+static void pulser_initial_delay_isr_handler(pulser_st * context);
+static void pulser_initial_delay_task_handler(pulser_st * context);
 
-static void timed_event_active_isr_handler(timed_event_context_st * context);
-static void timed_event_active_task_handler(timed_event_context_st * context);
+static void pulser_active_isr_handler(pulser_st * context);
+static void pulser_active_task_handler(pulser_st * context);
 
-static timed_event_context_st timed_event_contexts[NUM_PULSERS]; 
-static size_t next_pulser;
+typedef struct pulser_state_st
+{
+    __attribute((aligned(8))) OS_STK pulser_stk[STACK_SIZE_PULSER];
 
-static void indicate_timeout(timed_event_context_st * context)
+    pulser_st pulser_contexts[NUM_PULSERS];
+    size_t next_pulser;
+    uint32_t active_pulser_flags;
+} pulser_state_st;
+
+static pulser_state_st pulser_state;
+
+static void indicate_timeout(pulser_st * context)
 {
     CoEnterISR();
+
     isr_SetFlag(context->flag);
+
     CoExitISR();
 }
 
-static void timed_event_idle_isr_handler(timed_event_context_st * context)
+static void pulser_idle_isr_handler(pulser_st * context)
 {
     (void)context;
 }
 
-static void timed_event_idle_task_handler(timed_event_context_st * context)
+static void pulser_idle_task_handler(pulser_st * context)
 {
     (void)context;
 }
 
-static void timed_event_initial_delay_isr_handler(timed_event_context_st * context)
+static void pulser_initial_delay_isr_handler(pulser_st * context)
 {
     /* The initial delay is over. */
     context->active_callback(context->user_arg);
@@ -76,7 +95,7 @@ static void timed_event_initial_delay_isr_handler(timed_event_context_st * conte
 #endif
 }
 
-static void timed_event_initial_delay_task_handler(timed_event_context_st * context)
+static void pulser_initial_delay_task_handler(pulser_st * context)
 {
 #if defined(PULSE_DEBUG)
     if (context->systick_at_start_task == 0)
@@ -84,13 +103,17 @@ static void timed_event_initial_delay_task_handler(timed_event_context_st * cont
         context->systick_at_start_task = SysTick->VAL; 
     }
 #endif
-    context->isr_handler = timed_event_active_isr_handler;
-    context->task_handler = timed_event_active_task_handler;
+    /* TODO: Add support for pulses longer than 65536 by adding a 
+     * new state that schedules follow up events, but leaves the 
+     * pulser active. Add similar support for longer initial delays.
+     */
+    context->isr_state_handler =  pulser_active_isr_handler; 
+    context->task_state_handler = pulser_active_task_handler;
 
     timer_channel_schedule_followup_event(context->timer_context, context->active_us);
 }
 
-static void timed_event_active_isr_handler(timed_event_context_st * context)
+static void pulser_active_isr_handler(pulser_st * context)
 {
     /* The pulse time is over. */
     context->inactive_callback(context->user_arg);
@@ -102,7 +125,7 @@ static void timed_event_active_isr_handler(timed_event_context_st * context)
 #endif
 }
 
-static void timed_event_active_task_handler(timed_event_context_st * context)
+static void pulser_active_task_handler(pulser_st * context)
 {
 #if defined(PULSE_DEBUG)
     if (context->systick_at_gpio_off_task == 0)
@@ -110,28 +133,28 @@ static void timed_event_active_task_handler(timed_event_context_st * context)
         context->systick_at_gpio_off_task = SysTick->VAL;
     }
 #endif
-    context->isr_handler = timed_event_idle_isr_handler;
-    context->task_handler = timed_event_idle_task_handler;
+    context->isr_state_handler = pulser_idle_isr_handler;
+    context->task_state_handler = pulser_idle_task_handler;
     timer_channel_disable(context->timer_context);
 }
 
-static void timed_event_callback(void * const arg)
+static void pulser_timer_callback(void * const arg)
 {
-    timed_event_context_st * const context = arg;
+    pulser_st * const context = arg;
 
-    context->isr_handler(context);
-    /* We signal the pulser task no matter the current state, 
-     * so to avoid repitition we put the call to indicate a timeout after the state handler. 
+    context->isr_state_handler(context);
+    /* We signal the pulser task no matter the current state.
+     * To avoid repitition we put the call to signal the pulser task after the state handler. 
      */
     indicate_timeout(context);
 }
 
-void schedule_pulse(timed_event_context_st * const context, uint32_t const base_time, uint32_t const initial_delay_us, uint_fast16_t const pulse_us)
+void schedule_pulse(pulser_st * const context, uint32_t const base_time, uint32_t const initial_delay_us, uint_fast16_t const pulse_us)
 {
     if (context->timer_context != NULL)
     {
-        context->isr_handler = timed_event_initial_delay_isr_handler;
-        context->task_handler = timed_event_initial_delay_task_handler;
+        context->isr_state_handler = pulser_initial_delay_isr_handler;
+        context->task_state_handler = pulser_initial_delay_task_handler;
         context->active_us = pulse_us;
 
 #if defined(PULSE_DEBUG)
@@ -145,84 +168,75 @@ void schedule_pulse(timed_event_context_st * const context, uint32_t const base_
     }
 }
 
-void pulse_start(timed_event_context_st * const context,
+void pulse_start(pulser_st * const context,
                  uint32_t initial_delay_us, 
                  uint_fast16_t pulse_us)
 {
     schedule_pulse(context, timer_channel_get_current_time(context->timer_context), initial_delay_us, pulse_us);
 }
 
-timed_event_context_st * pulser_get(pulser_callback const active_callback,
-                                    pulser_callback const inactive_callback,
-                                    void * const user_arg)
+pulser_st * pulser_get(pulser_callback const active_callback,
+                    pulser_callback const inactive_callback,
+                    void * const user_arg)
 {
-    timed_event_context_st * pulser;
+    pulser_st * pulser;
 
-    if (next_pulser >= NUM_PULSERS)
+    if (pulser_state.next_pulser >= NUM_PULSERS)
     {
         pulser = NULL;
         goto done;
     }
 
-    pulser = &timed_event_contexts[next_pulser];
+    pulser = &pulser_state.pulser_contexts[pulser_state.next_pulser];
 
     pulser->active_callback = active_callback;
     pulser->inactive_callback = inactive_callback;
     pulser->user_arg = user_arg;
 
-    next_pulser++;
+    pulser_state.next_pulser++;
+    pulser_state.active_pulser_flags |= 1 << pulser->flag;
 
 done:
     return pulser;
 }
 
-#define STACK_SIZE_PULSER 1024
-static __attribute((aligned(8))) OS_STK pulser_stk[STACK_SIZE_PULSER]; /*!< Define "taskC" task stack */
-
-void pulser_task(void * pdata)
+static void pulser_task(void * pdata)
 {
-    int index;
-    uint32_t flags_to_check;
-
-    for (index = 0, flags_to_check = 0; index < NUM_PULSERS; index++)
-    {
-        timed_event_context_st * const context = &timed_event_contexts[index];
-        flags_to_check |= (1 << context->flag);
-    }
-
     (void)pdata;
+
     while (1)
     {
         size_t index;
         StatusType err;
         U32 readyFlags;
 
-        readyFlags = CoWaitForMultipleFlags(flags_to_check, OPT_WAIT_ANY, 0, &err);
-        for (index = 0; index < NUM_PULSERS; index++)
+        readyFlags = CoWaitForMultipleFlags(pulser_state.active_pulser_flags, OPT_WAIT_ANY, 0, &err);
+
+        for (index = 0; index < pulser_state.next_pulser; index++)
         {
-            timed_event_context_st * const context = &timed_event_contexts[index];
+            pulser_st * const context = &pulser_state.pulser_contexts[index];
 
             if ((readyFlags & (1 << context->flag)))
             {
-                context->task_handler(context); 
+                context->task_state_handler(context); 
             }
         }
     }
 }
 
-void init_pulses(void)
+void init_pulsers(void)
 {
     size_t index;
 
-    CoCreateTask(pulser_task, 0, 2, &pulser_stk[STACK_SIZE_PULSER - 1], STACK_SIZE_PULSER);
+    CoCreateTask(pulser_task, 0, 2, &pulser_state.pulser_stk[STACK_SIZE_PULSER - 1], STACK_SIZE_PULSER);
 
     for (index = 0; index < NUM_PULSERS; index++)
     {
-        timed_event_context_st * const context = &timed_event_contexts[index];
+        pulser_st * const context = &pulser_state.pulser_contexts[index];
 
         context->flag = CoCreateFlag(Co_TRUE, Co_FALSE);
 
-        context->timer_context = timer_channel_get(timed_event_callback, context);
+        context->timer_context = timer_channel_get(pulser_timer_callback, context);
     }
 }
 
@@ -233,7 +247,7 @@ void print_pulse_details(void)
 
     for (index = 0; index < NUM_PULSERS; index++)
     {
-        timed_event_context_st * const context = &timed_event_contexts[index];
+        pulser_st * const context = &pulser_state.pulser_contexts[index];
 
         if (context->systick_at_start > 0)
         {
@@ -260,7 +274,7 @@ void reset_pulse_details(void)
     printf("reset\r\n");
     for (index = 0; index < NUM_PULSERS; index++)
     {
-        timed_event_context_st * const context = &timed_event_contexts[index];
+        pulser_st * const context = &pulser_state.pulser_contexts[index];
 
         context->systick_at_start = 0;
         context->systick_at_gpio_off = 0;

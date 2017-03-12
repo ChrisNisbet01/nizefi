@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#define SECONDS_PER_MINUTE 60.0
+#define RPM_TO_DEGREES_PER_SECOND_FACTOR 6.0
 
 struct rpm_calculator_st
 {
@@ -42,31 +42,31 @@ void rpm_calculator_smoothing_factor_set(rpm_calculator_st * rpm_calculator, flo
     rpm_calculator->smoothing_factor = smoothing_factor;
 }
 
-float rpm_calculator_update(rpm_calculator_st * rpm_calculator, float const delta_seconds, float const revolutions)
+float rpm_calculator_update(rpm_calculator_st * rpm_calculator, float const degrees_of_rotation, float const delta_seconds)
 {
     float const interval = delta_seconds;
-    float const rpm = SECONDS_PER_MINUTE * revolutions / interval;
+    float const degrees_per_second = degrees_of_rotation / delta_seconds;
 
-    /* XXX - Work in degrees/second and convert result to RPM? */
-    rpm_calculator->raw_rpm = rpm;
+    rpm_calculator->raw_rpm = degrees_per_second / RPM_TO_DEGREES_PER_SECOND_FACTOR;
 
     if (rpm_calculator->had_sample)
     {
         float const smoothed_degrees_per_second = rpm_calculator->smoothed_degrees_per_second;
 
-        /* Merge this new rpm into the current rpm. The amount of effect
-         * from the new sample is proportional to the amount of time 
-         * between samples. 
+        /* Merge this rate into the current rate. Note that the 
+         * smoothing will be affected by the time between updates.
          */
-        rpm_calculator->smoothed_rpm = (rpm_calculator->smoothing_factor * rpm_calculator->raw_rpm) +
-            ((1.0 - rpm_calculator->smoothing_factor) * rpm_calculator->smoothed_rpm);
-        rpm_calculator->smoothed_degrees_per_second = 6.0 * rpm_calculator->smoothed_rpm;
+        rpm_calculator->smoothed_degrees_per_second = (rpm_calculator->smoothing_factor * degrees_per_second) +
+            ((1.0 - rpm_calculator->smoothing_factor) * rpm_calculator->smoothed_degrees_per_second);
+
+        rpm_calculator->smoothed_rpm = rpm_calculator->smoothed_degrees_per_second / RPM_TO_DEGREES_PER_SECOND_FACTOR;
 
         rpm_calculator->degrees_per_second_acceleration = (rpm_calculator->smoothed_degrees_per_second - smoothed_degrees_per_second) / delta_seconds;
     }
     else
     {
         rpm_calculator->smoothed_rpm = 0.0;
+        rpm_calculator->smoothed_degrees_per_second = 0.0;
         rpm_calculator->degrees_per_second_acceleration = 0.0;
         rpm_calculator->had_sample = true;
     }
@@ -98,4 +98,19 @@ float rpm_calcuator_get_degrees_turned(rpm_calculator_st * const rpm_calculator,
         + (0.5 * rpm_calculator->degrees_per_second_acceleration * seconds * seconds);
 
     return degrees_of_rotation;
+}
+
+float rpm_calcuator_get_time_to_rotate_angle(rpm_calculator_st * const rpm_calculator, float const degrees)
+{
+    /* Given an amount of rotation (hopefully small so that 
+     * acceleration won't change much in that time), calculate how 
+     * much time it will take to rotate this many degrees of 
+     * rotation. time = degrees / degrees_per_second. XXX 
+     * - Need to take into account acceleration. 
+     */
+    float seconds;
+
+    seconds = degrees / rpm_calculator->smoothed_degrees_per_second;
+
+    return seconds;
 }

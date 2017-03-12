@@ -98,14 +98,27 @@ injector_output_st * injector_output_get(void)
         injector_output = NULL;
         goto done;
     }
+
     injector_output = &injector_outputs[next_injector_output];
     gpio_config = injector_output->gpio_config;
+
+    /* TODO: Add support for getting the GPIO to use from a pool of
+     * GPIO? Each GPIO would have some flags indicating its
+     * capabilites (e.g. injector, ignition, relay, trigger input, 
+     * ADC, whatever). 
+     */
+
+    injector_output->pulsed_output = pulsed_output_get(gpio_config);
+    if (injector_output->pulsed_output == NULL)
+    {
+        injector_output = NULL;
+        goto done;
+    }
+
     next_injector_output++;
 
     /* Initialise the GPIO. */
     initialise_injector_gpio(gpio_config->port, gpio_config->pin, gpio_config->RCC_AHBPeriph);
-
-    injector_output->pulsed_output = pulsed_output_get(injector_output->gpio_config);
 
 done:
     return injector_output;

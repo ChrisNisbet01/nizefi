@@ -3,17 +3,17 @@
 
 #include <stdint.h>
 
-typedef struct timed_event_context_st timed_event_context_st; 
+typedef struct pulser_st pulser_st;
 typedef void (* pulser_callback)(void * const user_arg);
 
-timed_event_context_st * pulser_get(pulser_callback const active_callback, 
-                                    pulser_callback const inactive_callback, 
-                                    void * const user_arg);
+pulser_st * pulser_get(pulser_callback const active_callback,
+                    pulser_callback const inactive_callback, 
+                    void * const user_arg);
 
-void pulse_start(timed_event_context_st * const pulser,
+void pulse_start(pulser_st * const pulser,
                  uint32_t initial_delay_us, 
                  uint_fast16_t pulse_us);
-void init_pulses(void);
+void init_pulsers(void);
 void print_pulse_details(void);
 void reset_pulse_details(void);
 

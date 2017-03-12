@@ -7,7 +7,7 @@
 struct pulsed_output_st
 {
     gpio_config_st * gpio_config;
-    timed_event_context_st * pulser;
+    pulser_st * pulser;
 };
 
 static void output_active_callback(void * const arg);

@@ -197,7 +197,7 @@ void hi_res_tick(void)
 
 void debug_injector_pulse(void)
 {
-    injector_output_st * const injector = injector_1;
+    //injector_output_st * const injector = injector_1;
 
     //injector_pulse_schedule(injector, 100, 1000);
 }
@@ -206,7 +206,7 @@ void injector_pulse_callback(float const angle, void * const user_arg)
 {
     injector_output_st * const injector = user_arg;
 
-    injector_pulse_schedule(injector, 100, 1000);
+    injector_pulse_schedule(injector, 100, 60000);
 }
 
 int main(void)
@@ -224,7 +224,7 @@ int main(void)
 
     initSerialTask();
 
-    init_pulses();
+    init_pulsers();
 
     injector_1 = injector_output_get();
     injector_2 = injector_output_get();

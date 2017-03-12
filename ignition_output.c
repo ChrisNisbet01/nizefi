@@ -26,6 +26,16 @@ static gpio_config_st const ignition_gpios[] =
     {
         .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
         .port = GPIOD,
+        .pin = GPIO_Pin_12
+    },
+    {
+        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
+        .port = GPIOD,
+        .pin = GPIO_Pin_13
+    },
+    {
+        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
+        .port = GPIOD,
         .pin = GPIO_Pin_14
     },
     {
@@ -49,6 +59,15 @@ static ignition_output_st ignition_outputs[NUM_IGNITION_GPIOS] =
     [ignition_2_index] =
     {
     .gpio_config = &ignition_gpios[ignition_2_index]
+    }
+    ,
+    [ignition_3_index] =
+    {
+        .gpio_config = &ignition_gpios[ignition_3_index]
+    },
+    [ignition_4_index] =
+    {
+        .gpio_config = &ignition_gpios[ignition_4_index]
     }
 };
 static size_t next_ignition_output;
@@ -86,14 +105,21 @@ ignition_output_st * ignition_output_get(void)
         ignition_output = NULL;
         goto done;
     }
+
     ignition_output = &ignition_outputs[next_ignition_output];
     gpio_config = ignition_output->gpio_config;
+
+    ignition_output->pulsed_output = pulsed_output_get(gpio_config);
+    if (ignition_output->pulsed_output == NULL)
+    {
+        ignition_output = NULL;
+        goto done;
+    }
+
     next_ignition_output++;
 
     /* Initialise the GPIO. */
     initialise_ignition_gpio(gpio_config->port, gpio_config->pin, gpio_config->RCC_AHBPeriph);
-
-    ignition_output->pulsed_output = pulsed_output_get(ignition_output->gpio_config);
 
 done:
     return ignition_output;

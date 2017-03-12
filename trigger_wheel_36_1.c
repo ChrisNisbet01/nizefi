@@ -298,20 +298,16 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
      */
     if (context->tooth_number == 1)
     {
-        uint32_t rotation_time_32 = timestamp - last_revolution_timestamp;
-        float const rotation_time = (float)rotation_time_32 / 1000000;
+        uint32_t const rotation_time_us = timestamp - last_revolution_timestamp;
+        float const rotation_time_seconds = (float)rotation_time_us / 1000000;
 
-        if (!context->second_revolution)
-        {
-            debug_injector_pulse();
-        }
-        /* TODO: update rmp based upon current RPM. If RPM high, 
-         * update less often, so that the time between updates remains 
-         * more constant and doesn't increase CPU load with RPM so much. 
-         * So maybe once/rev above 3000rpm, twice/rev between 1000 and 
-         * 3000, and  four times/rev below 1000 rpm. 
+        /* TODO: call rpm_calculator_update based upon current RPM. If 
+         * RPM high, update less often so that the time between updates 
+         * remains more constant and doesn't increase CPU load with RPM 
+         * so much. So maybe once/rev above 3000rpm, twice/rev between 
+         * 1000 and 3000, and  four times/rev below 1000 rpm. 
          */
-        rpm_calculator_update(context->rpm_calculator, rotation_time, 1.0);
+        rpm_calculator_update(context->rpm_calculator, 360.0, rotation_time_seconds);
     }
 }
 
