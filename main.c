@@ -206,7 +206,7 @@ void injector_pulse_callback(float const angle, void * const user_arg)
 {
     injector_output_st * const injector = user_arg;
 
-    injector_pulse_schedule(injector, 100, 60000);
+    injector_pulse_schedule(injector, 100, 4000);
 }
 
 int main(void)
