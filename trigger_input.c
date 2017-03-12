@@ -372,34 +372,30 @@ static void configure_gpio_external_irq(trigger_gpio_config_st const * const gpi
      */
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
 
-    /* Tell system that you will use PA0 for EXTI_Line0. */
+    /* Connect the port:pin to an external interrupt. */
     SYSCFG_EXTILineConfig(gpio_config->EXTI_PortSource, gpio_config->EXTI_PinSource);
 
+    /* Make this interrupt the highest priority. */
+    /* XXX - Need to figure out the best interrupt priorities. */
     configure_nested_vector_interrupt_controller(gpio_config->NVIC_IRQChannel, 0, 0);
 
     connect_pin_to_external_interrupt(gpio_config->EXTI_Line,
                                       EXTI_Trigger_Falling); /* XXX - Configurable? */
 }
 
-static void initialise_crank_trigger_gpio(void)
+static void initialise_crank_trigger_input(void)
 {
-    trigger_gpio_config_st const * const gpio_config = &crank_trigger_gpio_config;
-
-    configure_gpio_pin(gpio_config);
-
-    //configure_gpio_input_capture(handle_crank_trigger_signal);
-    //configure_gpio_input_capture(handle_cam_trigger_signal); 
-
-    configure_gpio_external_irq(gpio_config);
+    register_crank_trigger_callback(handle_crank_trigger_signal);
 }
 
-static void initialise_cam_trigger_gpio(void)
+static void initialise_cam_trigger_input(void)
 {
     trigger_gpio_config_st const * const gpio_config = &cam_trigger_gpio_config;
 
     configure_gpio_pin(gpio_config);
 
     configure_gpio_external_irq(gpio_config);
+
 }
 
 void init_trigger_signals(trigger_wheel_36_1_context_st * const trigger_wheel_context)
@@ -429,7 +425,7 @@ void init_trigger_signals(trigger_wheel_36_1_context_st * const trigger_wheel_co
                  &trigger_signal_task_stack[TRIGGER_SIGNAL_TASK_STACK_SIZE - 1],
                  TRIGGER_SIGNAL_TASK_STACK_SIZE);
 
-    initialise_crank_trigger_gpio();
-    initialise_cam_trigger_gpio();
+    initialise_crank_trigger_input();
+    initialise_cam_trigger_input();
 }
 

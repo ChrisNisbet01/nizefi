@@ -206,17 +206,19 @@ void injector_pulse_callback(float const crank_angle,
     injector_pulse_schedule(injector, 100, 4000);
 }
 
+#define TIMER_FREQUENCY 1000000
+
 int main(void)
 {
     SystemInit();
 
     init_leds();
 
-    initHiResTimer(1000000);
+    initHiResTimer(TIMER_FREQUENCY);
 
     //init_button();
 
-    timed_events_init(1000000);    
+    timed_events_init(TIMER_FREQUENCY);
 
     CoInitOS(); /*!< Initialise CoOS */
 
