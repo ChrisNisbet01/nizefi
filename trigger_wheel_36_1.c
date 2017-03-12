@@ -60,8 +60,8 @@ struct trigger_wheel_36_1_context_st
     tooth_context_st * tooth_1; /* When synched, this point to the entry for tooth #1, 
                                     which is the tooth after the missing tooth. 
                                  */
-    int out_by;
     tooth_context_st * tooth_next;
+    unsigned int tooth_number; /* Note - Starts at 1.*/
 
     rpm_calculator_st * rpm_calculator;
 
@@ -69,7 +69,6 @@ struct trigger_wheel_36_1_context_st
     bool second_revolution; /* In second half of the 720 degree cycle. */
 
     float tooth_1_crank_angle; /* -ve indicates BTDC, +ve indicates after TDC. */
-    unsigned int tooth_number; /* Note - Starts at 1.*/
     uint32_t timestamp; /* timestamp taken when the lat tooth was processed. */
     float crank_angle;
     float engine_cycle_angle;
@@ -88,7 +87,8 @@ static void cam_trigger_wheel_state_handler(trigger_wheel_36_1_context_st * cons
 
 static trigger_wheel_36_1_context_st trigger_wheel_context;
 static float const degrees_per_tooth = 360.0 / TOTAL_TEETH;
-static unsigned int crank_angles[NUM_TEETH] =
+
+static unsigned int const crank_angles[NUM_TEETH] =
 {
     0, 10, 20, 30, 40, 50, 60, 70, 80, 90,
     100, 110, 120, 130, 140, 150, 160, 170, 180,
@@ -252,6 +252,22 @@ static void cam_trigger_wheel_state_handler(trigger_wheel_36_1_context_st * cons
     context->had_cam_signal = true;
 }
 
+static void execute_callbacks(bool const second_revolution, 
+                              unsigned int const tooth_number, 
+                              uint32_t const timestamp)
+{
+    unsigned int const event_index = tooth_number - 1;
+
+    /* timestamp is the time at which the tooth was encountered. 
+     */
+    if (event_callbacks[second_revolution][event_index].user_callback != NULL)
+    {
+        event_callbacks[second_revolution][event_index].user_callback(crank_angles[event_index],
+                                                                      timestamp,
+                                                                      event_callbacks[second_revolution][event_index].user_arg);
+    }
+}
+
 static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context,
                                                       uint32_t const timestamp)
 {
@@ -265,7 +281,8 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
     current_tooth->last_delta = timestamp - previous_tooth->last_timestamp;
 
     /* It is expected that the cam signal arrives some time just 
-     * before tooth #1. 
+     * before tooth #1 and before the start of the first half of the
+     * engine cycle. 
      */
 
     CoEnterMutexSection(context->teeth_mutex);
@@ -284,15 +301,7 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
 
     CoLeaveMutexSection(context->teeth_mutex); 
 
-    {
-        unsigned int const event_index = context->tooth_number - 1;
-
-        if (event_callbacks[context->second_revolution][event_index].user_callback != NULL)
-        {
-            event_callbacks[context->second_revolution][event_index].user_callback(crank_angles[event_index],
-                                                                                   event_callbacks[context->second_revolution][event_index].user_arg);
-        }
-    }
+    execute_callbacks(context->second_revolution, tooth_number, timestamp);
 
     /* TODO: Validate time deltas between teeth. 
      */
@@ -344,18 +353,19 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
 }
 
 void trigger_36_1_register_callback(trigger_wheel_36_1_context_st * const context,
-                                    float const engine_degrees,
+                                    float const engine_cycle_angle,
                                     trigger_event_callback callback,
                                     void * const user_arg)
 {
     size_t index;
     unsigned int cycle;
 
+    /* FIXME - This isn't very clean. */
     for (cycle = 0; cycle < 2; cycle++)
     {
         for (index = 0; index < NUM_TEETH; index++)
         {
-            if (((float)crank_angles[index] + (360.0 * cycle)) == engine_degrees)
+            if (((float)crank_angles[index] + (360.0 * cycle)) == engine_cycle_angle)
             {
                 event_callbacks[cycle][index].user_callback = callback;
                 event_callbacks[cycle][index].user_arg = user_arg;

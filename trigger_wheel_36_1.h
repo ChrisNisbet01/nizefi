@@ -8,7 +8,9 @@ typedef struct trigger_wheel_36_1_context_st trigger_wheel_36_1_context_st;
 #include <stdint.h>
 
 
-typedef void (* trigger_event_callback)(float const tooth_angle_atdc, void * const arg); 
+typedef void (* trigger_event_callback)(float const crank_angle_atdc, 
+                                        uint32_t timestamp,
+                                        void * const arg); 
 
 trigger_wheel_36_1_context_st * trigger_36_1_init(void);
 

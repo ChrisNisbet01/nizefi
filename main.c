@@ -202,7 +202,9 @@ void debug_injector_pulse(void)
     //injector_pulse_schedule(injector, 100, 1000);
 }
 
-void injector_pulse_callback(float const angle, void * const user_arg)
+void injector_pulse_callback(float const crank_angle, 
+                             uint32_t timestamp,
+                             void * const user_arg)
 {
     injector_output_st * const injector = user_arg;
 
