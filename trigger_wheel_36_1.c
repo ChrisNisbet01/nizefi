@@ -52,6 +52,10 @@ typedef struct tooth_context_st
 struct trigger_wheel_36_1_context_st
 {
     trigger_wheel_state_t state;
+
+    /* Trigger input crank and cam state handlers are called by the 
+     * trigger_input task. 
+     */
     trigger_36_1_state_handler crank_trigger_state_hander;
     trigger_36_1_state_handler cam_trigger_state_hander; 
     trigger_36_1_angle_get_handler angle_get_handler;
@@ -70,6 +74,10 @@ struct trigger_wheel_36_1_context_st
     rpm_calculator_st * rpm_calculator;
 
     bool had_cam_signal; /* Set after receiving a camshaft signal. Indicates next tooth #1 is the start of the 720 degree cycle. */
+
+    /* TODO - Support two-stroke and batch fire configurations 
+     * where the engine cycle is only 360 degrees. 
+     */
     bool second_revolution; /* In second half of the 720 degree cycle. */
 
     float tooth_1_crank_angle; /* -ve indicates BTDC, +ve indicates after TDC. */
@@ -166,7 +174,7 @@ static void update_engine_angles(trigger_wheel_36_1_context_st * const context)
     for (index = 0; index < NUM_TEETH; index++, tooth = next_tooth_get(context, tooth));
     {
         /* Work out crank angle. */
-        tooth->crank_angle = 11.0 + index + normalise_crank_angle((float)crank_angles[index] + context->tooth_1_crank_angle);
+        tooth->crank_angle = normalise_crank_angle((float)crank_angles[index] + context->tooth_1_crank_angle);
     }
 }
 
@@ -250,7 +258,7 @@ static inline uint32_t double_tooth_change_high_limit(uint32_t const time)
 }
 
 
-static bool first_tooth_after_skip_tooth(uint32_t const this_delta, uint32_t const previous_delta)
+static bool is_second_tooth_after_skip_tooth(uint32_t const this_delta, uint32_t const previous_delta)
 {
     return this_delta < single_tooth_change_low_limit(previous_delta);
 }
@@ -294,7 +302,7 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
 
         current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
 
-        if (first_tooth_after_skip_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
+        if (is_second_tooth_after_skip_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
         {
             /* Just had a pulse with much shorter delta than the previous. 
              * This is probably tooth #2, which would make the previous 
@@ -353,6 +361,40 @@ static void execute_callbacks(bool const second_revolution,
     }
 }
 
+static bool validate_tooth_interval(unsigned int tooth_number,
+                                    uint32_t const this_delta,
+                                    uint32_t const previous_delta)
+{
+    bool tooth_interval_is_valid;
+
+    if (tooth_number == 1)
+    {
+        if (!is_second_tooth_after_skip_tooth(this_delta, previous_delta))
+        {
+            tooth_interval_is_valid = false;
+            goto done;
+        }
+    }
+    else if (tooth_number == NUM_TEETH)
+    {
+        if (!interval_matches_skip_tooth(this_delta, previous_delta))
+        {
+            tooth_interval_is_valid = false;
+            goto done;
+        }
+    }
+    else if (!interval_matches_previous_tooth(this_delta, previous_delta))
+    {
+        tooth_interval_is_valid = false;
+        goto done;
+    }
+
+    tooth_interval_is_valid = true; 
+
+done:
+    return tooth_interval_is_valid;
+}
+
 static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context,
                                                       uint32_t const timestamp)
 {
@@ -360,10 +402,19 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
     tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
     uint32_t const last_revolution_timestamp = current_tooth->timestamp;
     unsigned int tooth_number;
+    bool lost_synch = false;
 
     context->pulse_counter++;
     current_tooth->timestamp = timestamp;
     current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
+
+    if (!validate_tooth_interval(context->tooth_number,
+                                 current_tooth->time_since_previous_tooth, 
+                                 previous_tooth->time_since_previous_tooth))
+    {
+        lost_synch = true;
+        goto done;
+    }
 
     /* It is expected that the cam signal arrives some time just 
      * before tooth #1 and before the start of the first half of the
@@ -376,6 +427,15 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
     tooth_number = context->tooth_number + 1;
     if (tooth_number == NUM_TEETH + 1)
     {
+        /* Ensure that the cam signal has arrived if not currently in 
+         * the first half of the engine cycle, and that it has not 
+         * arrived if in the second half. 
+         */
+        if ((context->second_revolution ^ context->had_cam_signal))
+        {
+            lost_synch = true;
+        }
+
         tooth_number = 1;
         context->second_revolution = !context->had_cam_signal;
         context->had_cam_signal = false;
@@ -385,6 +445,11 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
     context->tooth_next = next_tooth_get(context, current_tooth); 
 
     CoLeaveMutexSection(context->teeth_mutex); 
+
+    if (lost_synch)
+    {
+        goto done;
+    }
 
     execute_callbacks(context->second_revolution, tooth_number, timestamp);
 
@@ -403,6 +468,15 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
          */
         rpm_calculator_update(context->rpm_calculator, 360.0, rotation_time_seconds);
     }
+
+done:
+    if (lost_synch)
+    {
+        /* TODO: Update statistics. */
+        set_unsynched(context);
+    }
+
+    return;
 }
 
 trigger_wheel_36_1_context_st * trigger_36_1_init(void)
