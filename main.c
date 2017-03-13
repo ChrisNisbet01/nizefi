@@ -37,7 +37,7 @@
 #include "pulser.h"
 #include "injector_output.h"
 #include "ignition_output.h"
-#include "trigger_wheel_36_1.h"
+#include "trigger_input.h"
 #include "leds.h"
 #include "hi_res_timer.h"
 #include "serial_task.h"
@@ -177,11 +177,11 @@ void ignition_pulse_callback(float const crank_angle,
                              uint32_t timestamp,
                              void * const user_arg)
 {
-    injector_output_st * const injector = user_arg;
+    ignition_output_st * const ignition = user_arg;
     (void)crank_angle;
     (void)timestamp; 
 
-    ignition_pulse_schedule(injector, 100, 2000);
+    ignition_pulse_schedule(ignition, 100, 2000);
 }
 
 static void get_injector_outputs(void)

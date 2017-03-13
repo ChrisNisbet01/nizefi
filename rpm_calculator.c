@@ -23,7 +23,7 @@ void rpm_calculator_init(rpm_calculator_st * rpm_calculator,
                          float const smoothing_factor)
 {
     rpm_calculator->had_sample = false;
-    rpm_calculator->smoothing_factor = 1.0;
+    rpm_calculator->smoothing_factor = smoothing_factor;
     rpm_calculator->raw_rpm = 0.0;
     rpm_calculator->smoothed_rpm = 0.0;
     rpm_calculator->smoothed_degrees_per_second = 0.0;
@@ -46,7 +46,6 @@ void rpm_calculator_smoothing_factor_set(rpm_calculator_st * rpm_calculator, flo
 
 float rpm_calculator_update(rpm_calculator_st * rpm_calculator, float const degrees_of_rotation, float const delta_seconds)
 {
-    float const interval = delta_seconds;
     float const degrees_per_second = degrees_of_rotation / delta_seconds;
 
     rpm_calculator->raw_rpm = degrees_per_second / RPM_TO_DEGREES_PER_SECOND_FACTOR;

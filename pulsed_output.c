@@ -6,7 +6,7 @@
 
 struct pulsed_output_st
 {
-    gpio_config_st * gpio_config;
+    gpio_config_st const * gpio_config;
     pulser_st * pulser;
 };
 

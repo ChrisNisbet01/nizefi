@@ -275,7 +275,6 @@ float engine_cycle_angle_get(void)
 
 void trigger_input_task(void * pdata)
 {
-    unsigned int tooth = 0;
     OS_EventID message_queue_id = *(OS_EventID *)pdata;
 
     while (1)

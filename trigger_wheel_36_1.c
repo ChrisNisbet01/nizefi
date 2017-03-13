@@ -258,12 +258,12 @@ static inline uint32_t single_tooth_change_low_limit(uint32_t const time)
 
 static inline uint32_t single_tooth_change_high_limit(uint32_t const time)
 {
-    return (time * 18) / 10;
+    return (time * 17) / 10;
 }
 
-static inline uint32_t double_tooth_change_high_limit(uint32_t const time)
+static inline uint32_t skip_tooth_change_high_limit(uint32_t const time)
 {
-    return (time * 25) / 10;
+    return (time * 27) / 10;
 }
 
 
@@ -281,7 +281,7 @@ static bool interval_matches_previous_tooth(uint32_t const this_delta, uint32_t 
 static bool interval_matches_skip_tooth(uint32_t const this_delta, uint32_t const previous_delta)
 {
     return (this_delta > single_tooth_change_high_limit(previous_delta))
-           && (this_delta <= double_tooth_change_high_limit(previous_delta));
+           && (this_delta <= skip_tooth_change_high_limit(previous_delta));
 }
 
 static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context,
@@ -378,6 +378,15 @@ static bool validate_tooth_interval(unsigned int tooth_number,
 {
     bool tooth_interval_is_valid;
 
+    /* If it has been more than 1 second since the last trigger 
+     * input we'll go to lost sych state. 
+     */
+    if (this_delta > TIMER_FREQUENCY)
+    {
+        tooth_interval_is_valid = false;
+        goto done;
+    }
+
     if (tooth_number == 1)
     {
         if (!is_second_tooth_after_skip_tooth(this_delta, previous_delta))
@@ -438,6 +447,8 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
     tooth_number = context->tooth_number + 1;
     if (tooth_number == NUM_TEETH + 1)
     {
+        tooth_number = 1; /* Back to tooth #1 */
+
         /* Ensure that the cam signal has arrived if not currently in 
          * the first half of the engine cycle, and that it has not 
          * arrived if in the second half. 
@@ -447,7 +458,6 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
             lost_synch = true;
         }
 
-        tooth_number = 1;
         context->second_revolution = !context->had_cam_signal;
         context->had_cam_signal = false;
         context->revolution_counter++;
@@ -468,8 +478,8 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
      */
     if (context->tooth_number == 1)
     {
-        uint32_t const rotation_time_us = timestamp - last_revolution_timestamp;
-        float const rotation_time_seconds = (float)rotation_time_us / TIMER_FREQUENCY;
+        uint32_t const rotation_time_ticks = timestamp - last_revolution_timestamp;
+        float const rotation_time_seconds = (float)rotation_time_ticks / TIMER_FREQUENCY;
 
         /* TODO: call rpm_calculator_update based upon current RPM. If 
          * RPM high, update less often so that the time between updates 
@@ -479,6 +489,11 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
          */
         rpm_calculator_update(context->rpm_calculator, 360.0, rotation_time_seconds);
     }
+
+    /* To avoid the check for lost_synch (which is know is false 
+     * at this point), just return. Reduces CPU load.
+     */
+    return;
 
 done:
     if (lost_synch)
