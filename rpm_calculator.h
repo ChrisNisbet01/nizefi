@@ -3,7 +3,10 @@
 
 typedef struct rpm_calculator_st rpm_calculator_st;
 
-rpm_calculator_st * rpm_calculator_get(void);
+rpm_calculator_st * rpm_calculator_get(float const smoothing_factor);
+void rpm_calculator_init(rpm_calculator_st * rpm_calculator,
+                         float const smoothing_factor);
+
 void rpm_calculator_smoothing_factor_set(rpm_calculator_st * rpm_calculator, float const smoothing_factor);
 float rpm_calculator_update(rpm_calculator_st * rpm_calculator, 
                             float const degrees_of_rotation, 

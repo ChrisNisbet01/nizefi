@@ -15,12 +15,6 @@
 #define NUM_MISSING_TEETH 1
 #define TOTAL_TEETH (NUM_TEETH + NUM_MISSING_TEETH)
 
-typedef enum trigger_wheel_state_t
-{
-    trigger_wheel_state_not_synched,
-    trigger_wheel_state_synched
-} trigger_wheel_state_t;
-
 typedef void (*trigger_36_1_state_handler)(trigger_wheel_36_1_context_st * const context, 
                                            uint32_t const timestamp);
 
@@ -40,24 +34,21 @@ typedef struct tooth_context_st
 
     uint32_t timestamp;
     uint32_t time_since_previous_tooth; /* Difference in timestamp between this tooth and the previous timestamp.
-                            Valid only if pulse_counter > 1.
-                          */
+                                            Valid only if pulse_counter > 1.
+                                        */
     float crank_angle; /* Retain this information for each tooth. It may vary depending on the configuration of the tooth #1 offset.*/
-    int index; 
 
-    event_st event[2]; /* One callback allowed for each half of the engine cycle. */
+    event_st event[2]; /* One callback allowed for each half of the engine cycle. Index using context->second_revolution. */
 
 } tooth_context_st;
 
 struct trigger_wheel_36_1_context_st
 {
-    trigger_wheel_state_t state;
-
     /* Trigger input crank and cam state handlers are called by the 
      * trigger_input task. 
      */
-    trigger_36_1_state_handler crank_trigger_state_hander;
-    trigger_36_1_state_handler cam_trigger_state_hander; 
+    trigger_36_1_state_handler crank_trigger_state_handler;
+    trigger_36_1_state_handler cam_trigger_state_handler;
     trigger_36_1_angle_get_handler angle_get_handler;
 
     uint32_t pulse_counter;
@@ -65,7 +56,12 @@ struct trigger_wheel_36_1_context_st
 
     tooth_context_st tooth_contexts[NUM_TEETH];
 
-    tooth_context_st * tooth_1; /* When synched, this point to the entry for tooth #1, 
+    /* Note that the event callbacks are in tooth order, starting 
+     * at tooth #1. 
+     */
+    event_st event_callbacks[2][NUM_TEETH]; 
+
+    tooth_context_st * tooth_1; /* When synched, this points to the entry for tooth #1, 
                                     which is the tooth after the missing tooth. 
                                  */
     tooth_context_st * tooth_next;
@@ -97,6 +93,9 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
 static void cam_trigger_wheel_state_handler(trigger_wheel_36_1_context_st * const context,
                                             uint32_t const timestamp);
 
+static float rpm_smoothing_factor = 0.98; /* TODO - Make configurable. */
+static float tooth_1_crank_angle = 0.0; /* TODO - Make configurable. */
+
 static trigger_wheel_36_1_context_st trigger_wheel_context;
 static float const degrees_per_tooth = 360.0 / TOTAL_TEETH;
 
@@ -108,7 +107,17 @@ static unsigned int const crank_angles[NUM_TEETH] =
     280, 290, 300, 310, 320, 330, 340
 };
 
-static event_st event_callbacks[2][NUM_TEETH];
+float rpm_smoothing_factor_get(void)
+{
+    /* TODO - Make configurable. */
+    return rpm_smoothing_factor;
+}
+
+float tooth_1_crank_angle_get(void)
+{
+    /* TODO - Make configurable. */
+    return tooth_1_crank_angle;
+}
 
 /* Cripes. This CIRCLEQ implementation will return a pointer to 
  * the list head, not just entries in the list. 
@@ -224,18 +233,18 @@ static float trigger_36_1_synched_angle_get(trigger_wheel_36_1_context_st * cons
 
 static void set_unsynched(trigger_wheel_36_1_context_st * const context)
 {
-    context->state = trigger_wheel_state_not_synched;
-    context->crank_trigger_state_hander = crank_trigger_wheel_state_not_synched_handler;
-    context->cam_trigger_state_hander = cam_trigger_wheel_state_handler; 
+    context->crank_trigger_state_handler = crank_trigger_wheel_state_not_synched_handler;
+    context->cam_trigger_state_handler = cam_trigger_wheel_state_handler;
     context->angle_get_handler = trigger_36_1_unsynched_angle_get;
     context->pulse_counter = 0;
     context->tooth_1 = NULL;
+    rpm_calculator_init(context->rpm_calculator, rpm_smoothing_factor); 
 }
 
 static void set_synched(trigger_wheel_36_1_context_st * const context)
 {
-    context->state = trigger_wheel_state_synched;
-    context->crank_trigger_state_hander = crank_trigger_wheel_state_synched_handler;
+    context->crank_trigger_state_handler = crank_trigger_wheel_state_synched_handler;
+    context->cam_trigger_state_handler = cam_trigger_wheel_state_handler; /* Doesn't change, but for consitency we'll include here. */
     context->angle_get_handler = trigger_36_1_synched_angle_get;
     context->had_cam_signal = false; /* Still need a cam signal to know which half of the cycle the engine is in.
                                       */
@@ -286,6 +295,7 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
 
     if (context->pulse_counter == 1)
     {
+        /* Nothing to do. */
     }
     else if (context->pulse_counter == 2)
     {
@@ -345,19 +355,20 @@ static void cam_trigger_wheel_state_handler(trigger_wheel_36_1_context_st * cons
     context->had_cam_signal = true;
 }
 
-static void execute_callbacks(bool const second_revolution, 
+static void execute_callbacks(trigger_wheel_36_1_context_st const * const context,
                               unsigned int const tooth_number, 
                               uint32_t const timestamp)
 {
     unsigned int const event_index = tooth_number - 1;
+    event_st const * const event = &context->event_callbacks[context->second_revolution][event_index];
 
     /* timestamp is the time at which the tooth was encountered. 
      */
-    if (event_callbacks[second_revolution][event_index].user_callback != NULL)
+    if (event->user_callback != NULL)
     {
-        event_callbacks[second_revolution][event_index].user_callback(crank_angles[event_index],
-                                                                      timestamp,
-                                                                      event_callbacks[second_revolution][event_index].user_arg);
+        event->user_callback(crank_angles[event_index],
+                             timestamp,
+                             event->user_arg);
     }
 }
 
@@ -451,7 +462,7 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
         goto done;
     }
 
-    execute_callbacks(context->second_revolution, tooth_number, timestamp);
+    execute_callbacks(context, tooth_number, timestamp);
 
     /* TODO: Validate time deltas between teeth. 
      */
@@ -484,9 +495,15 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     trigger_wheel_36_1_context_st * context = &trigger_wheel_context;
     size_t index;
 
-    context->tooth_1_crank_angle = 0.0; /* TODO: Configurable. */
+    context->tooth_1_crank_angle = tooth_1_crank_angle_get();
+
+    /* RPM calculator is needed before setting unsynched state as 
+     * set_unsynched references the calculator. 
+     */
+    context->rpm_calculator = rpm_calculator_get(rpm_smoothing_factor_get());
 
     set_unsynched(context);
+
     context->teeth_mutex = CoCreateMutex();
 
     context->revolution_counter = 0;
@@ -496,7 +513,6 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     {
         tooth_context_st * const tooth_context = &context->tooth_contexts[index];
 
-        tooth_context->index = index;
         CIRCLEQ_INSERT_TAIL(&context->teeth_queue, tooth_context, entry);
     }
     context->tooth_next = CIRCLEQ_FIRST(&context->teeth_queue);
@@ -504,9 +520,6 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     /* Until synchronised, the entry representing tooth #1 is 
      * unknown. 
      */
-
-    context->rpm_calculator = rpm_calculator_get();
-    rpm_calculator_smoothing_factor_set(context->rpm_calculator, 0.98); /* TODO: Make configurable. */
 
     return context;
 }
@@ -531,8 +544,11 @@ void trigger_36_1_register_callback(trigger_wheel_36_1_context_st * const contex
         {
             if (((float)crank_angles[index] + (360.0 * cycle)) == engine_cycle_angle)
             {
-                event_callbacks[cycle][index].user_callback = callback;
-                event_callbacks[cycle][index].user_arg = user_arg;
+                event_st * const event = &context->event_callbacks[cycle][index];
+
+                event->user_callback = callback;
+                event->user_arg = user_arg;
+
                 goto done;
             }
         }
@@ -545,13 +561,13 @@ done:
 void trigger_36_1_handle_crank_pulse(trigger_wheel_36_1_context_st * const context,
                                uint32_t const timestamp)
 {
-    context->crank_trigger_state_hander(context, timestamp);
+    context->crank_trigger_state_handler(context, timestamp);
 }
 
 void trigger_36_1_handle_cam_pulse(trigger_wheel_36_1_context_st * const context,
                                      uint32_t const timestamp)
 {
-    context->cam_trigger_state_hander(context, timestamp);
+    context->cam_trigger_state_handler(context, timestamp);
 }
 
 float trigger_36_1_rpm_get(trigger_wheel_36_1_context_st * const context)

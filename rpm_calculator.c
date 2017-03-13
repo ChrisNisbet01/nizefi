@@ -19,7 +19,8 @@ struct rpm_calculator_st
 
 static rpm_calculator_st rpm_calculator_context;
 
-static void rpm_calculator_init(rpm_calculator_st * rpm_calculator)
+void rpm_calculator_init(rpm_calculator_st * rpm_calculator, 
+                         float const smoothing_factor)
 {
     rpm_calculator->had_sample = false;
     rpm_calculator->smoothing_factor = 1.0;
@@ -29,11 +30,11 @@ static void rpm_calculator_init(rpm_calculator_st * rpm_calculator)
     rpm_calculator->degrees_per_second_acceleration = 0.0;
 }
 
-rpm_calculator_st * rpm_calculator_get(void)
+rpm_calculator_st * rpm_calculator_get(float const smoothing_factor)
 {
     rpm_calculator_st * const rpm_calculator = &rpm_calculator_context;
 
-    rpm_calculator_init(rpm_calculator);
+    rpm_calculator_init(rpm_calculator, smoothing_factor);
 
     return rpm_calculator;
 }
