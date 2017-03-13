@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define IGNITION_MAX 8
+
 typedef struct ignition_output_st ignition_output_st;
 
 ignition_output_st * ignition_output_get(void);

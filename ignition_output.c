@@ -24,24 +24,24 @@ typedef enum ignition_index_t
 static gpio_config_st const ignition_gpios[] =
 {
     {
-        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
-        .port = GPIOD,
-        .pin = GPIO_Pin_12
+        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOC,
+        .port = GPIOC,
+        .pin = GPIO_Pin_7
     },
     {
-        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
-        .port = GPIOD,
-        .pin = GPIO_Pin_13
-    },
-    {
-        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
-        .port = GPIOD,
+        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOE,
+        .port = GPIOE,
         .pin = GPIO_Pin_14
     },
     {
-        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
-        .port = GPIOD,
-        .pin = GPIO_Pin_15
+        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOC,
+        .port = GPIOC,
+        .pin = GPIO_Pin_9
+    },
+    {
+        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOE,
+        .port = GPIOE,
+        .pin = GPIO_Pin_12
     }
 };
 #define NUM_IGNITION_GPIOS (sizeof ignition_gpios / sizeof ignition_gpios[0])

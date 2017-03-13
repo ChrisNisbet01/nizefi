@@ -76,13 +76,19 @@ static const input_capture_config_st input_capture_configs[] =
 
 static input_capture_context_st input_capture_contexts[1];
 
+/* XXX - Still need to make a common function for all of the 
+ * various GPIO init functions to use. 
+ */
 static void configure_input_trigger_gpio_pin(uint32_t const RCC_AHBPeriph,
                                              GPIO_TypeDef * const port,
-                                             uint32_t pin,
-                                             GPIOMode_TypeDef const mode)
+                                             uint32_t pin)
 {
     GPIO_InitTypeDef GPIO_InitStruct;
 
+    /* Need to put the GPIO into AF mode. No pullups required as 
+     * the external wiring will pull the signal up or down. 
+     * Ensure the peripheral clock is enabled for this GPIO port. 
+     */
     /* Enable the clock for the GPIO port. */
     RCC_AHB1PeriphClockCmd(RCC_AHBPeriph, ENABLE);
 
@@ -184,19 +190,20 @@ static void initInputCapture(TIM_TypeDef * tim, uint_fast8_t channel, uint_fast1
     TIM_ICInit(tim, &TIM_ICInitStructure);
 }
 
-
+/* TODO: Add support enabling and disabling the input trigger 
+ * without unconfiguring it. 
+ */
 static void register_input_trigger_callback(size_t input_capture_index,
                                             void(* callback)(uint32_t const timestamp_us))
 {
     input_capture_context_st * const input_capture_context = &input_capture_contexts[input_capture_index];
-    input_capture_config_st * const input_capture_config = &input_capture_configs[input_capture_index];
+    input_capture_config_st const * const input_capture_config = &input_capture_configs[input_capture_index];
 
     input_capture_context->callback = callback;
 
     configure_input_trigger_gpio_pin(input_capture_config->RCC_AHBPeriph,
                                      input_capture_config->gpio,
-                                     input_capture_config->pin,
-                                     input_capture_config->pinAF);
+                                     input_capture_config->pin);
 
     /* Connect the timer to the pin. 
      */

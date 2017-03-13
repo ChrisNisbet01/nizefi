@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
 
 #define RPM_TO_DEGREES_PER_SECOND_FACTOR 6.0
 
@@ -100,6 +101,8 @@ float rpm_calcuator_get_degrees_turned(rpm_calculator_st * const rpm_calculator,
     return degrees_of_rotation;
 }
 
+#define MINIMUM_VALID_ROTATION_SPEED_DEGREES_PER_SECOND 20.0
+
 float rpm_calcuator_get_time_to_rotate_angle(rpm_calculator_st * const rpm_calculator, float const degrees)
 {
     /* Given an amount of rotation (hopefully small so that 
@@ -110,7 +113,14 @@ float rpm_calcuator_get_time_to_rotate_angle(rpm_calculator_st * const rpm_calcu
      */
     float seconds;
 
-    seconds = degrees / rpm_calculator->smoothed_degrees_per_second;
+    if (rpm_calculator->smoothed_degrees_per_second >= MINIMUM_VALID_ROTATION_SPEED_DEGREES_PER_SECOND)
+    {
+        seconds = degrees / rpm_calculator->smoothed_degrees_per_second;
+    }
+    else
+    {
+        seconds = NAN;
+    }
 
     return seconds;
 }

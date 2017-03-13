@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define INJECTOR_MAX 8
+
 typedef struct injector_output_st injector_output_st;
 
 injector_output_st * injector_output_get(void);

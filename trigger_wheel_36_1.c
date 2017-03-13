@@ -3,6 +3,7 @@
 #include "queue.h"
 #include "rpm_calculator.h"
 #include "leds.h"
+#include "hi_res_timer.h"
 
 #include <coocox.h>
 
@@ -23,6 +24,8 @@ typedef enum trigger_wheel_state_t
 typedef void (*trigger_36_1_state_handler)(trigger_wheel_36_1_context_st * const context, 
                                            uint32_t const timestamp);
 
+typedef float (*trigger_36_1_angle_get_handler)(trigger_wheel_36_1_context_st * const context, bool const engine_angle);
+
 typedef struct event_st event_st;
 
 struct event_st
@@ -35,8 +38,8 @@ typedef struct tooth_context_st
 {
     CIRCLEQ_ENTRY(tooth_context_st) entry; 
 
-    uint32_t last_timestamp;
-    uint32_t last_delta; /* Difference in timestamp between this tooth and the previous timestamp.
+    uint32_t timestamp;
+    uint32_t time_since_previous_tooth; /* Difference in timestamp between this tooth and the previous timestamp.
                             Valid only if pulse_counter > 1.
                           */
     float crank_angle; /* Retain this information for each tooth. It may vary depending on the configuration of the tooth #1 offset.*/
@@ -51,6 +54,7 @@ struct trigger_wheel_36_1_context_st
     trigger_wheel_state_t state;
     trigger_36_1_state_handler crank_trigger_state_hander;
     trigger_36_1_state_handler cam_trigger_state_hander; 
+    trigger_36_1_angle_get_handler angle_get_handler;
 
     uint32_t pulse_counter;
     uint32_t revolution_counter;
@@ -166,11 +170,56 @@ static void update_engine_angles(trigger_wheel_36_1_context_st * const context)
     }
 }
 
+static float trigger_36_1_unsynched_angle_get(trigger_wheel_36_1_context_st * const context, bool const engine_angle)
+{
+    /* Until the trigger wheel code is synched in the crank angle 
+     * returned is 0.0.
+     */
+    (void)context;
+    (void)engine_angle;
+
+    return 0.0;
+}
+
+static float trigger_36_1_synched_angle_get(trigger_wheel_36_1_context_st * const context, bool const engine_angle)
+{
+    unsigned int tooth_number;
+    float crank_angle;
+    uint32_t ticks_since_tooth_passed;
+    uint32_t tooth_timestamp;
+    uint32_t time_now;
+    float degrees_since_tooth_passed;
+    bool previous_tooth_in_second_revolution;
+
+    CoEnterMutexSection(context->teeth_mutex);
+
+    tooth_timestamp = context->timestamp;
+    tooth_number = context->tooth_number;
+    previous_tooth_in_second_revolution = (context->second_revolution && context->tooth_number != 1)
+        || (!context->second_revolution && context->tooth_number == 1);
+
+    CoLeaveMutexSection(context->teeth_mutex);
+
+    time_now = hi_res_counter_val();
+    ticks_since_tooth_passed = time_now - tooth_timestamp;
+    degrees_since_tooth_passed = rpm_calcuator_get_degrees_turned(context->rpm_calculator, (float)ticks_since_tooth_passed / TIMER_FREQUENCY);
+
+    crank_angle = normalise_crank_angle((float)crank_angles[tooth_number - 1] + context->tooth_1_crank_angle + degrees_since_tooth_passed);
+
+    if (engine_angle && previous_tooth_in_second_revolution)
+    {
+        crank_angle += 360.0;
+    }
+
+    return crank_angle;
+}
+
 static void set_unsynched(trigger_wheel_36_1_context_st * const context)
 {
     context->state = trigger_wheel_state_not_synched;
     context->crank_trigger_state_hander = crank_trigger_wheel_state_not_synched_handler;
     context->cam_trigger_state_hander = cam_trigger_wheel_state_handler; 
+    context->angle_get_handler = trigger_36_1_unsynched_angle_get;
     context->pulse_counter = 0;
     context->tooth_1 = NULL;
 }
@@ -179,19 +228,53 @@ static void set_synched(trigger_wheel_36_1_context_st * const context)
 {
     context->state = trigger_wheel_state_synched;
     context->crank_trigger_state_hander = crank_trigger_wheel_state_synched_handler;
+    context->angle_get_handler = trigger_36_1_synched_angle_get;
     context->had_cam_signal = false; /* Still need a cam signal to know which half of the cycle the engine is in.
                                       */
     update_engine_angles(context);
 }
 
-static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, 
+static inline uint32_t single_tooth_change_low_limit(uint32_t const time)
+{
+    return (time * 7) / 10;
+}
+
+static inline uint32_t single_tooth_change_high_limit(uint32_t const time)
+{
+    return (time * 18) / 10;
+}
+
+static inline uint32_t double_tooth_change_high_limit(uint32_t const time)
+{
+    return (time * 25) / 10;
+}
+
+
+static bool first_tooth_after_skip_tooth(uint32_t const this_delta, uint32_t const previous_delta)
+{
+    return this_delta < single_tooth_change_low_limit(previous_delta);
+}
+
+static bool interval_matches_previous_tooth(uint32_t const this_delta, uint32_t const previous_delta)
+{
+    return (this_delta <= single_tooth_change_high_limit(previous_delta * 18))
+    && (this_delta > single_tooth_change_low_limit(previous_delta));
+}
+
+static bool interval_matches_skip_tooth(uint32_t const this_delta, uint32_t const previous_delta)
+{
+    return (this_delta > single_tooth_change_high_limit(previous_delta))
+           && (this_delta <= double_tooth_change_high_limit(previous_delta));
+}
+
+static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context,
                                                           uint32_t const timestamp)
 {
     tooth_context_st * current_tooth = context->tooth_next;
 
     /* TODO: Filter out bogus pulses. */
     context->pulse_counter++;
-    current_tooth->last_timestamp = timestamp;
+    current_tooth->timestamp = timestamp;
 
     if (context->pulse_counter == 1)
     {
@@ -200,7 +283,7 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
     {
         tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
 
-        current_tooth->last_delta = timestamp - previous_tooth->last_timestamp;
+        current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
         /* Not much else that can be done until another trigger signal 
          * comes in. 
          */
@@ -208,10 +291,10 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
     else
     {
         tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
-        tooth_context_st * previous_prevous_tooth = previous_tooth_get(context, previous_tooth);
 
-        current_tooth->last_delta = timestamp - previous_tooth->last_timestamp;
-        if ((current_tooth->last_delta < ((previous_tooth->last_delta * 7) / 10)))
+        current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
+
+        if (first_tooth_after_skip_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
         {
             /* Just had a pulse with much shorter delta than the previous. 
              * This is probably tooth #2, which would make the previous 
@@ -223,14 +306,12 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
             context->second_revolution = !context->had_cam_signal; 
             set_synched(context);
         }
-        else if ((current_tooth->last_delta < ((previous_tooth->last_delta * 18) / 10))
-                  && (current_tooth->last_delta > ((previous_tooth->last_delta * 7) / 10)))
+        else if (interval_matches_previous_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
         {
             /* Time between signals is similar to the previous one. Still 
                waiting for skip tooth. */
         }
-        else if ((current_tooth->last_delta > ((previous_tooth->last_delta * 18) / 10))
-                 && (current_tooth->last_delta < ((previous_tooth->last_delta * 25) / 10)))
+        else if (interval_matches_skip_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
         {
             /* Time between signals is about what we expect for a skip 
              * tooth. That would make this tooth #1.
@@ -251,6 +332,8 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
 static void cam_trigger_wheel_state_handler(trigger_wheel_36_1_context_st * const context,
                                             uint32_t const timestamp)
 {
+    (void)timestamp; /* Is it necessary to record when the cam signal came in, or just that we had it. */
+
     context->had_cam_signal = true;
 }
 
@@ -275,12 +358,12 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
 {
     tooth_context_st * current_tooth = context->tooth_next; 
     tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
-    uint32_t const last_revolution_timestamp = current_tooth->last_timestamp;
+    uint32_t const last_revolution_timestamp = current_tooth->timestamp;
     unsigned int tooth_number;
 
     context->pulse_counter++;
-    current_tooth->last_timestamp = timestamp;
-    current_tooth->last_delta = timestamp - previous_tooth->last_timestamp;
+    current_tooth->timestamp = timestamp;
+    current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
 
     /* It is expected that the cam signal arrives some time just 
      * before tooth #1 and before the start of the first half of the
@@ -310,7 +393,7 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
     if (context->tooth_number == 1)
     {
         uint32_t const rotation_time_us = timestamp - last_revolution_timestamp;
-        float const rotation_time_seconds = (float)rotation_time_us / 1000000;
+        float const rotation_time_seconds = (float)rotation_time_us / TIMER_FREQUENCY;
 
         /* TODO: call rpm_calculator_update based upon current RPM. If 
          * RPM high, update less often so that the time between updates 
@@ -362,6 +445,11 @@ void trigger_36_1_register_callback(trigger_wheel_36_1_context_st * const contex
     size_t index;
     unsigned int cycle;
 
+    /* Find the tooth that most closely matches the desired angle. 
+     * Note that the desired angle is specified in engine cycle 
+     * degrees. 
+     */
+
     /* FIXME - This isn't very clean. */
     for (cycle = 0; cycle < 2; cycle++)
     {
@@ -397,45 +485,13 @@ float trigger_36_1_rpm_get(trigger_wheel_36_1_context_st * const context)
     return rpm_calculator_smoothed_rpm_get(context->rpm_calculator);
 }
 
-float trigger_36_1_angle_get(trigger_wheel_36_1_context_st * const context, bool const engine_angle)
-{
-    unsigned int tooth_number;
-    float crank_angle;
-    uint32_t us_since_tooth_passed;
-    uint32_t tooth_timestamp;
-    uint32_t time_now;
-    float degrees_since_tooth_passed;
-    bool previous_tooth_in_second_revolution;
-
-    CoEnterMutexSection(context->teeth_mutex);
-
-    tooth_timestamp = context->timestamp;
-    tooth_number = context->tooth_number;
-    previous_tooth_in_second_revolution = (context->second_revolution && context->tooth_number != 1)
-        || (!context->second_revolution && context->tooth_number == 1); 
-
-    CoLeaveMutexSection(context->teeth_mutex);
-
-    time_now = hi_res_counter_val();
-    us_since_tooth_passed = time_now - tooth_timestamp;
-    degrees_since_tooth_passed = rpm_calcuator_get_degrees_turned(context->rpm_calculator, (float)us_since_tooth_passed / 1000000.0);
-    crank_angle = normalise_crank_angle((float)crank_angles[tooth_number - 1] + context->tooth_1_crank_angle + degrees_since_tooth_passed);
-
-    if (engine_angle && previous_tooth_in_second_revolution)
-    {
-        crank_angle += 360.0;
-    }
-
-    return crank_angle;
-}
-
 float trigger_36_1_crank_angle_get(trigger_wheel_36_1_context_st * const context)
 {
-    return trigger_36_1_angle_get(context, false);
+    return context->angle_get_handler(context, false);
 }
 
 float trigger_36_1_engine_cycle_angle_get(trigger_wheel_36_1_context_st * const context)
 {
-    return trigger_36_1_angle_get(context, true);
+    return context->angle_get_handler(context, true);
 }
 

@@ -114,7 +114,7 @@ static void handleNewSerialData( void )
                     {
                         float rpm_get(void);
                         float const rpm = rpm_get();
-                        uint32_t rpm_32 = rpm;
+                        uint32_t rpm_32 = lrintf(rpm);
 
                         //printf("rpm: %f\r\n", rpm);
                         printf("rpm_32: %"PRIu32"\r\n", rpm_32);
@@ -127,7 +127,7 @@ static void handleNewSerialData( void )
                     {
                         float crank_angle_get(void);
                         float const crank_angle = crank_angle_get();
-                        uint32_t crank_angle_32 = crank_angle;
+                        uint32_t crank_angle_32 = lrintf(crank_angle);
 
                         printf("crank: %f %"PRIu32"\r\n", crank_angle, crank_angle_32);
                     }
@@ -135,7 +135,7 @@ static void handleNewSerialData( void )
                     {
                         float engine_cycle_angle_get(void);
                         float const engine_cycle_angle = engine_cycle_angle_get();
-                        uint32_t engine_cycle_angle_32 = engine_cycle_angle;
+                        uint32_t engine_cycle_angle_32 = lrintf(engine_cycle_angle);
 
                         printf("engine: %"PRIu32" %f\r\n", engine_cycle_angle_32, engine_cycle_angle);
                     }

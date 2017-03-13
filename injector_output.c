@@ -21,6 +21,9 @@ typedef enum injector_index_t
     injector_8_index
 } injector_index_t;
 
+/* TODO - Support the gpio used on the Frankenso board. 
+ * Support all 8 GPIO. 
+ */
 static gpio_config_st const injector_gpios[] =
 {
     {
@@ -46,6 +49,9 @@ static gpio_config_st const injector_gpios[] =
 };
 #define NUM_INJECTOR_GPIOS (sizeof injector_gpios / sizeof injector_gpios[0])
 
+/* XXX - Must match the number of injector GPIO in the table 
+ * above. 
+ */
 static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
 {
     [injector_1_index] =
@@ -67,6 +73,7 @@ static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
         .gpio_config = &injector_gpios[injector_4_index]
     }
 };
+
 static size_t next_injector_output;
 
 static void initialise_injector_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pin, uint32_t const RCC_AHBPeriph)

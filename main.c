@@ -46,34 +46,30 @@
 #include <math.h>
 
 /*---------------------------- Symbol Define -------------------------------*/
-#define STACK_SIZE_TASKC 1024              /*!< Define "taskC" task size */
-#define STACK_SIZE_TASKD 1024              /*!< Define "taskD" task size */
 
 
 /* Private typedef -----------------------------------------------------------*/
 
 /*---------------------------- Variable Define -------------------------------*/
 GPIO_InitTypeDef GPIO_InitStructure;
-static __attribute((aligned(8))) OS_STK taskC_stk[STACK_SIZE_TASKC]; /*!< Define "taskC" task stack */
-static __attribute((aligned(8))) OS_STK taskD_stk[STACK_SIZE_TASKD]; /*!< Define "taskD" task stack */
 
-static injector_output_st * injector_1;
-static injector_output_st * injector_2;
-static injector_output_st * injector_3;
-static injector_output_st * injector_4;
-static ignition_output_st * ignition_1;
-static trigger_wheel_36_1_context_st * trigger_context; 
+/* TODO: Create an engine context structure to hold all runtime information.
+ */
+static injector_output_st * injectors[INJECTOR_MAX];
+static ignition_output_st * ignitions[IGNITION_MAX];
 
-static void common_thread_task(char const * const task_name, 
-                               unsigned int gpio_pin, 
-                               unsigned int const delay_ticks)
+static trigger_wheel_36_1_context_st * trigger_context;
+
+static unsigned int num_injectors_get(void)
 {
-    printf("CoOS task %s started\r\n", task_name);
-    while (1)
-    {
-        //GPIO_ToggleBits(GPIOD, gpio_pin); 
-        CoTickDelay(delay_ticks);
-    }
+    /* XXX - Get the value from the configuration. */
+    return 4;
+}
+
+static unsigned int num_ignition_outputs_get(void)
+{
+    /* XXX - Get the value from the configuration. */
+    return 4;
 }
 
 #if 0
@@ -166,47 +162,47 @@ static void init_leds(void)
 }
 
  
-void taskC(void * pdata)
-{
-    (void)pdata;
-    while (true)
-    {
-        if (GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0))
-        {
-            //injector_pulse_schedule(injector_1, 5000, 2500);
-            //ignition_pulse_schedule(ignition_1, 50000, 2500);
-        }
-        CoTickDelay(CFG_SYSTICK_FREQ / 4);
-    }
-}
-
-void taskD(void * pdata)
-{
-    (void)pdata;
-    //common_thread_task("D", GPIO_Pin_13, CFG_SYSTICK_FREQ);
-    while (true)
-    {
-        CoTickDelay(CFG_SYSTICK_FREQ);
-    }
-}
-
-void debug_injector_pulse(void)
-{
-    //injector_output_st * const injector = injector_1;
-
-    //injector_pulse_schedule(injector, 100, 1000);
-}
-
 void injector_pulse_callback(float const crank_angle, 
                              uint32_t timestamp,
                              void * const user_arg)
 {
     injector_output_st * const injector = user_arg;
+    (void)crank_angle;
+    (void)timestamp; 
 
     injector_pulse_schedule(injector, 100, 4000);
 }
 
-#define TIMER_FREQUENCY 1000000
+void ignition_pulse_callback(float const crank_angle,
+                             uint32_t timestamp,
+                             void * const user_arg)
+{
+    injector_output_st * const injector = user_arg;
+    (void)crank_angle;
+    (void)timestamp; 
+
+    ignition_pulse_schedule(injector, 100, 2000);
+}
+
+static void get_injector_outputs(void)
+{
+    size_t index;
+
+    for (index = 0; index < num_injectors_get(); index++)
+    {
+        injectors[index] = injector_output_get();
+    }
+}
+
+static void get_ignition_outputs(void)
+{
+    size_t index;
+
+    for (index = 0; index < num_ignition_outputs_get(); index++)
+    {
+        ignitions[index] = ignition_output_get();
+    }
+}
 
 int main(void)
 {
@@ -226,23 +222,26 @@ int main(void)
 
     init_pulsers();
 
-    injector_1 = injector_output_get();
-    injector_2 = injector_output_get();
-    injector_3 = injector_output_get();
-    injector_4 = injector_output_get();
-    ignition_1 = ignition_output_get();
+    get_injector_outputs();
+    get_ignition_outputs();
 
     trigger_context = trigger_36_1_init();
-    trigger_36_1_register_callback(trigger_context, 0.0, injector_pulse_callback, injector_1);
-    trigger_36_1_register_callback(trigger_context, 180.0, injector_pulse_callback, injector_2);
-    trigger_36_1_register_callback(trigger_context, 360.0, injector_pulse_callback, injector_3);
-    trigger_36_1_register_callback(trigger_context, 540.0, injector_pulse_callback, injector_4);
+
+    /* temp debug do some output pulses at various times in the 
+     * engine cycle. 
+     */
+    trigger_36_1_register_callback(trigger_context, 0.0, injector_pulse_callback, injectors[0]);
+    trigger_36_1_register_callback(trigger_context, 180.0, injector_pulse_callback, injectors[1]);
+    trigger_36_1_register_callback(trigger_context, 360.0, injector_pulse_callback, injectors[2]);
+    trigger_36_1_register_callback(trigger_context, 540.0, injector_pulse_callback, injectors[3]);
+
+    trigger_36_1_register_callback(trigger_context, 20.0, ignition_pulse_callback, ignitions[0]);
+    trigger_36_1_register_callback(trigger_context, 200.0, ignition_pulse_callback, ignitions[1]);
+    trigger_36_1_register_callback(trigger_context, 380.0, ignition_pulse_callback, ignitions[2]);
+    trigger_36_1_register_callback(trigger_context, 560.0, ignition_pulse_callback, ignitions[3]);
 
     init_trigger_signals(trigger_context); /* Done after CoInitOS() as it uses CoOS resources. */
 
-    /* Create some dummy tasks */ 
-    CoCreateTask(taskC, 0, 3, &taskC_stk[STACK_SIZE_TASKC - 1], STACK_SIZE_TASKC);
-    //CoCreateTask(taskD, 0, 9, &taskD_stk[STACK_SIZE_TASKD - 1], STACK_SIZE_TASKD);
 
     fprintf(stderr, "CoOS RTOS: Starting scheduler\r\n");
 
