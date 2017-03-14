@@ -120,6 +120,7 @@ LDFLAGS = $(CPU_FLAGS) \
 
 # now specify source files
 COMMON_SRC = \
+	$(SRC_DIR)/utils.c \
 	$(SRC_DIR)/stdio/printf.c \
 	$(SRC_DIR)/main.c \
 	$(SRC_DIR)/trigger_input.c \

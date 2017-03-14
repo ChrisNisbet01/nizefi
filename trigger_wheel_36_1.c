@@ -4,6 +4,7 @@
 #include "rpm_calculator.h"
 #include "leds.h"
 #include "hi_res_timer.h"
+#include "utils.h"
 
 #include <coocox.h>
 
@@ -89,6 +90,8 @@ struct trigger_wheel_36_1_context_st
     OS_MutexID teeth_mutex;
 };
 
+typedef void (* event_list_callback_fn)(event_st const * const event, void * const user_arg);
+
 static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_context_st * const context, 
                                                           uint32_t const timestamp);
 static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context_st * const context,
@@ -125,11 +128,30 @@ float tooth_1_crank_angle_get(void)
     return tooth_1_crank_angle;
 }
 
+/* All event_entry list code relating to accessing of the list 
+ * kept together. This should make it easier to use a different 
+ * list type if the need should arise. 
+ */
+static inline void event_entry_list_init(event_list_head_st * const head)
+{
+    SLIST_INIT(head);
+}
+
+static inline void event_entry_list_insert(event_list_head_st * head, event_st * const event)
+{
+    SLIST_INSERT_HEAD(head, event, entry);
+}
+
 static void event_entry_init(void)
 {
     size_t index;
 
-    SLIST_INIT(&free_event_entries);
+    event_entry_list_init(&free_event_entries);
+
+    /* Add all events into a linked list for easy retrieval. Easier 
+     * to keep track of which ones are free if support for 
+     * deregistering callbacks is ever supported. 
+    */
     for (index = 0; index < NUM_EVENT_ENTRIES; index++)
     {
         SLIST_INSERT_HEAD(&free_event_entries, &event_entries[index], entry);
@@ -146,6 +168,16 @@ static event_st * event_entry_get(void)
     }
 
     return event;
+}
+
+static void iterate_events(event_list_head_st * const head, event_list_callback_fn callback, void * const user_arg)
+{
+    event_st * event;
+
+    SLIST_FOREACH(event, head, entry)
+    {
+        callback(event, user_arg);
+    }
 }
 
 /* Cripes. This CIRCLEQ implementation will return a pointer to 
@@ -175,27 +207,6 @@ tooth_context_st * next_tooth_get(trigger_wheel_36_1_context_st * const context,
     }
 
     return next;
-}
-
-static float normalise_angle(float const angle_in, float const maximum_angle)
-{
-    float angle = angle_in;
-
-    while (angle < 0.0)
-    {
-        angle += maximum_angle;
-    }
-    while (angle >= maximum_angle)
-    {
-        angle -= maximum_angle;
-    }
-
-    return angle;
-}
-
-static float normalise_crank_angle(float const crank_angle)
-{
-    return normalise_angle(crank_angle, 360.0);
 }
 
 /* XXX Only needs to be done once when the trigger wheel is 
@@ -384,19 +395,35 @@ static void cam_trigger_wheel_state_handler(trigger_wheel_36_1_context_st * cons
     context->had_cam_signal = true;
 }
 
-static void execute_callbacks(trigger_wheel_36_1_context_st const * const context,
-                              unsigned int const tooth_number, 
-                              uint32_t const timestamp)
+typedef struct event_callback_info_st
+{
+    float crank_angle;
+    uint32_t timestamp;
+} event_callback_info_st;
+
+static void event_callback(event_st const * const event, void * const user_arg)
+{
+    event_callback_info_st * callback_info = user_arg;
+
+    event->user_callback(callback_info->crank_angle,
+                         callback_info->timestamp,
+                         event->user_arg);
+}
+
+static void execute_engine_cycle_events(trigger_wheel_36_1_context_st * const context,
+                                        unsigned int const tooth_number, 
+                                        uint32_t const timestamp)
 {
     unsigned int const event_index = tooth_number - 1;
-    event_st * event;
+    event_callback_info_st callback_info;
 
-    SLIST_FOREACH(event, &context->event_callbacks[context->second_revolution][event_index], entry)
-    {
-        event->user_callback(crank_angles[event_index],
-                             timestamp,
-                             event->user_arg);
-    }
+    callback_info.crank_angle = (float)crank_angles[event_index] + context->tooth_1_crank_angle;
+    callback_info.timestamp = timestamp;
+
+    iterate_events(&context->event_callbacks[context->second_revolution][event_index], 
+                   event_callback,
+                   &callback_info);
+
 }
 
 static bool validate_tooth_interval(unsigned int tooth_number,
@@ -499,7 +526,7 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
         goto done;
     }
 
-    execute_callbacks(context, tooth_number, timestamp);
+    execute_engine_cycle_events(context, tooth_number, timestamp);
 
     /* TODO: Validate time deltas between teeth. 
      */
@@ -550,15 +577,14 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
 
     context->revolution_counter = 0;
 
-    CIRCLEQ_INIT(&context->teeth_queue);
-
     event_entry_init();
     for (index = 0; index < NUM_TEETH; index++)
     {
-        SLIST_INIT(&context->event_callbacks[0][index]);
-        SLIST_INIT(&context->event_callbacks[1][index]);
+        event_entry_list_init(&context->event_callbacks[0][index]);
+        event_entry_list_init(&context->event_callbacks[1][index]);
     }
 
+    CIRCLEQ_INIT(&context->teeth_queue);
     for (index = 0; index < NUM_TEETH; index++)
     {
         tooth_context_st * const tooth_context = &context->tooth_contexts[index];
@@ -620,7 +646,8 @@ void trigger_36_1_register_callback(trigger_wheel_36_1_context_st * const contex
         {
             event->user_callback = callback;
             event->user_arg = user_arg;
-            SLIST_INSERT_HEAD(&context->event_callbacks[cycle][index], event, entry);
+
+            event_entry_list_insert(&context->event_callbacks[cycle][index], event);
         }
         /* Else we have a problem. */
     }
