@@ -1,9 +1,9 @@
 CYGWIN=nodosfilewarning
 
 # setup executables
-TOOLCHAIN_PATH ?= /usr/local/gcc-arm-none-eabi-5_4-2016q3/bin
+TOOLCHAIN_PATH ?= /usr/local/gcc-arm-none-eabi-5_4-2016q3/bin/
 TOOLCHAIN_PREFIX ?= arm-none-eabi-
-CC_PREFIX ?= $(TOOLCHAIN_PATH)/$(TOOLCHAIN_PREFIX)
+CC_PREFIX ?= $(TOOLCHAIN_PATH)$(TOOLCHAIN_PREFIX)
 CC = $(CC_PREFIX)gcc
 OBJCOPY		 = $(CC_PREFIX)objcopy
 OBJDUMP		 = $(CC_PREFIX)objdump
