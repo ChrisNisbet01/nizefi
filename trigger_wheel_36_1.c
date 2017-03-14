@@ -14,6 +14,8 @@
 #define NUM_TEETH 35
 #define NUM_MISSING_TEETH 1
 #define TOTAL_TEETH (NUM_TEETH + NUM_MISSING_TEETH)
+#define NUM_EVENT_ENTRIES 20 /* Ensure is enough to cover all injectors + ignition outputs 
+                                and anything else that requires updating at a particualr engine angle. */
 
 typedef void (*trigger_36_1_state_handler)(trigger_wheel_36_1_context_st * const context, 
                                            uint32_t const timestamp);
@@ -24,9 +26,12 @@ typedef struct event_st event_st;
 
 struct event_st
 {
+    SLIST_ENTRY(event_st) entry;
     trigger_event_callback user_callback; /* user callback */
     void * user_arg;
 };
+
+typedef SLIST_HEAD(event_list_head_st, event_st) event_list_head_st;
 
 typedef struct tooth_context_st
 {
@@ -37,8 +42,6 @@ typedef struct tooth_context_st
                                             Valid only if pulse_counter > 1.
                                         */
     float crank_angle; /* Retain this information for each tooth. It may vary depending on the configuration of the tooth #1 offset.*/
-
-    event_st event[2]; /* One callback allowed for each half of the engine cycle. Index using context->second_revolution. */
 
 } tooth_context_st;
 
@@ -59,7 +62,7 @@ struct trigger_wheel_36_1_context_st
     /* Note that the event callbacks are in tooth order, starting 
      * at tooth #1. 
      */
-    event_st event_callbacks[2][NUM_TEETH]; 
+    event_list_head_st event_callbacks[2][NUM_TEETH];
 
     tooth_context_st * tooth_1; /* When synched, this points to the entry for tooth #1, 
                                     which is the tooth after the missing tooth. 
@@ -96,6 +99,9 @@ static void cam_trigger_wheel_state_handler(trigger_wheel_36_1_context_st * cons
 static float rpm_smoothing_factor = 0.98; /* TODO - Make configurable. */
 static float tooth_1_crank_angle = 0.0; /* TODO - Make configurable. */
 
+static event_list_head_st free_event_entries;
+static event_st event_entries[NUM_EVENT_ENTRIES];
+
 static trigger_wheel_36_1_context_st trigger_wheel_context;
 static float const degrees_per_tooth = 360.0 / TOTAL_TEETH;
 
@@ -117,6 +123,29 @@ float tooth_1_crank_angle_get(void)
 {
     /* TODO - Make configurable. */
     return tooth_1_crank_angle;
+}
+
+static void event_entry_init(void)
+{
+    size_t index;
+
+    SLIST_INIT(&free_event_entries);
+    for (index = 0; index < NUM_EVENT_ENTRIES; index++)
+    {
+        SLIST_INSERT_HEAD(&free_event_entries, &event_entries[index], entry);
+    }
+}
+
+static event_st * event_entry_get(void)
+{
+    event_st * event = SLIST_FIRST(&free_event_entries);
+
+    if (event != NULL)
+    {
+        SLIST_REMOVE_HEAD(&free_event_entries, entry);
+    }
+
+    return event;
 }
 
 /* Cripes. This CIRCLEQ implementation will return a pointer to 
@@ -152,13 +181,13 @@ static float normalise_angle(float const angle_in, float const maximum_angle)
 {
     float angle = angle_in;
 
-    if (angle < 0.0)
+    while (angle < 0.0)
     {
-        angle += 360.0;
+        angle += maximum_angle;
     }
-    else if (angle >= maximum_angle)
+    while (angle >= maximum_angle)
     {
-        angle -= 360.0;
+        angle -= maximum_angle;
     }
 
     return angle;
@@ -360,11 +389,9 @@ static void execute_callbacks(trigger_wheel_36_1_context_st const * const contex
                               uint32_t const timestamp)
 {
     unsigned int const event_index = tooth_number - 1;
-    event_st const * const event = &context->event_callbacks[context->second_revolution][event_index];
+    event_st * event;
 
-    /* timestamp is the time at which the tooth was encountered. 
-     */
-    if (event->user_callback != NULL)
+    SLIST_FOREACH(event, &context->event_callbacks[context->second_revolution][event_index], entry)
     {
         event->user_callback(crank_angles[event_index],
                              timestamp,
@@ -524,6 +551,14 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     context->revolution_counter = 0;
 
     CIRCLEQ_INIT(&context->teeth_queue);
+
+    event_entry_init();
+    for (index = 0; index < NUM_TEETH; index++)
+    {
+        SLIST_INIT(&context->event_callbacks[0][index]);
+        SLIST_INIT(&context->event_callbacks[1][index]);
+    }
+
     for (index = 0; index < NUM_TEETH; index++)
     {
         tooth_context_st * const tooth_context = &context->tooth_contexts[index];
@@ -539,38 +574,56 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     return context;
 }
 
+static int find_closest_tooth(float const engine_cycle_angle, int const cycle)
+{
+    int index;
+
+    for (index = NUM_TEETH - 1; index >= 0; index--)
+    {
+        if (((float)crank_angles[index] + (360.0 * cycle)) <= engine_cycle_angle)
+        {
+            break;
+        }
+    }
+
+    return index;
+}
+
 void trigger_36_1_register_callback(trigger_wheel_36_1_context_st * const context,
                                     float const engine_cycle_angle,
                                     trigger_event_callback callback,
                                     void * const user_arg)
 {
-    size_t index;
-    unsigned int cycle;
+    int cycle;
+    int index;
 
     /* Find the tooth that most closely matches the desired angle. 
      * Note that the desired angle is specified in engine cycle 
-     * degrees. 
+     * degrees ATDC. 
      */
 
-    /* FIXME - This isn't very clean. */
-    for (cycle = 0; cycle < 2; cycle++)
+    for (cycle = 1; cycle >= 0; cycle--)
     {
-        for (index = 0; index < NUM_TEETH; index++)
+        index = find_closest_tooth(engine_cycle_angle, cycle);
+
+        if (index >= 0)
         {
-            if (((float)crank_angles[index] + (360.0 * cycle)) == engine_cycle_angle)
-            {
-                event_st * const event = &context->event_callbacks[cycle][index];
-
-                event->user_callback = callback;
-                event->user_arg = user_arg;
-
-                goto done;
-            }
+            break;
         }
     }
 
-done:
-    return;
+    if (cycle >= 0 && index >= 0)
+    {
+        event_st * const event = event_entry_get();
+
+        if (event != NULL)
+        {
+            event->user_callback = callback;
+            event->user_arg = user_arg;
+            SLIST_INSERT_HEAD(&context->event_callbacks[cycle][index], event, entry);
+        }
+        /* Else we have a problem. */
+    }
 }
 
 void trigger_36_1_handle_crank_pulse(trigger_wheel_36_1_context_st * const context,
