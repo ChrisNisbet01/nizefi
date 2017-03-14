@@ -80,10 +80,8 @@ struct trigger_wheel_36_1_context_st
      */
     bool second_revolution; /* In second half of the 720 degree cycle. */
 
-    float tooth_1_crank_angle; /* -ve indicates BTDC, +ve indicates after TDC. */
-    uint32_t timestamp; /* timestamp taken when the lat tooth was processed. */
-    float crank_angle;
-    float engine_cycle_angle;
+    float tooth_1_crank_angle; /* -ve indicates BTDC, +ve indicates ATDC. */
+    uint32_t timestamp; /* timestamp taken when the last tooth was processed. */
 
     CIRCLEQ_HEAD(,tooth_context_st) teeth_queue;
 
@@ -106,9 +104,18 @@ static event_list_head_st free_event_entries;
 static event_st event_entries[NUM_EVENT_ENTRIES];
 
 static trigger_wheel_36_1_context_st trigger_wheel_context;
-static float const degrees_per_tooth = 360.0 / TOTAL_TEETH;
 
-static unsigned int const crank_angles[NUM_TEETH] =
+static unsigned int const trigger_wheel_tooth_angles[NUM_TEETH] =
+{
+    0, 10, 20, 30, 40, 50, 60, 70, 80, 90,
+    100, 110, 120, 130, 140, 150, 160, 170, 180,
+    190, 200, 210, 220, 230, 240, 250, 260, 270,
+    280, 290, 300, 310, 320, 330, 340
+};
+
+/* Crank angles at each tooth after the tooth #1 crank angle 
+   offset has been applied. */
+static float runtime_crank_angles[NUM_TEETH + 1] = /* +1 is to avoid stupid array-bounds compiler warning */
 {
     0, 10, 20, 30, 40, 50, 60, 70, 80, 90,
     100, 110, 120, 130, 140, 150, 160, 170, 180,
@@ -217,13 +224,16 @@ tooth_context_st * next_tooth_get(trigger_wheel_36_1_context_st * const context,
  */
 static void update_engine_angles(trigger_wheel_36_1_context_st * const context)
 {
-    size_t index;
     tooth_context_st * tooth = context->tooth_1; 
+    size_t index; 
 
-    for (index = 0; index < NUM_TEETH; index++, tooth = next_tooth_get(context, tooth));
+    for (index = 0; index < NUM_TEETH; index++);
     {
         /* Work out crank angle. */
-        tooth->crank_angle = normalise_crank_angle((float)crank_angles[index] + context->tooth_1_crank_angle);
+        runtime_crank_angles[index] = normalise_crank_angle((float)trigger_wheel_tooth_angles[index] + context->tooth_1_crank_angle);
+        tooth->crank_angle = runtime_crank_angles[index];
+
+        tooth = next_tooth_get(context, tooth);
     }
 }
 
@@ -261,7 +271,7 @@ static float trigger_36_1_synched_angle_get(trigger_wheel_36_1_context_st * cons
     ticks_since_tooth_passed = time_now - tooth_timestamp;
     degrees_since_tooth_passed = rpm_calcuator_get_degrees_turned(context->rpm_calculator, (float)ticks_since_tooth_passed / TIMER_FREQUENCY);
 
-    crank_angle = normalise_crank_angle((float)crank_angles[tooth_number - 1] + context->tooth_1_crank_angle + degrees_since_tooth_passed);
+    crank_angle = normalise_crank_angle(runtime_crank_angles[tooth_number - 1] + degrees_since_tooth_passed);
 
     if (engine_angle && previous_tooth_in_second_revolution)
     {
@@ -417,7 +427,7 @@ static void execute_engine_cycle_events(trigger_wheel_36_1_context_st * const co
     unsigned int const event_index = tooth_number - 1;
     event_callback_info_st callback_info;
 
-    callback_info.crank_angle = (float)crank_angles[event_index] + context->tooth_1_crank_angle;
+    callback_info.crank_angle = runtime_crank_angles[event_index];
     callback_info.timestamp = timestamp;
 
     iterate_events(&context->event_callbacks[context->second_revolution][event_index], 
@@ -564,6 +574,9 @@ trigger_wheel_36_1_context_st * trigger_36_1_init(void)
     trigger_wheel_36_1_context_st * context = &trigger_wheel_context;
     size_t index;
 
+    /* TODO: Support changing this angle while the engine is 
+     * turning. 
+     */
     context->tooth_1_crank_angle = tooth_1_crank_angle_get();
 
     /* RPM calculator is needed before setting unsynched state as 
@@ -606,7 +619,7 @@ static int find_closest_tooth(float const engine_cycle_angle, int const cycle)
 
     for (index = NUM_TEETH - 1; index >= 0; index--)
     {
-        if (((float)crank_angles[index] + (360.0 * cycle)) <= engine_cycle_angle)
+        if ((runtime_crank_angles[index] + (360.0 * cycle)) <= engine_cycle_angle)
         {
             break;
         }
