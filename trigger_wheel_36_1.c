@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <inttypes.h>
+#include <math.h>
 
 #define NUM_TEETH 35
 #define NUM_MISSING_TEETH 1
@@ -18,10 +19,11 @@
 #define NUM_EVENT_ENTRIES 20 /* Ensure is enough to cover all injectors + ignition outputs 
                                 and anything else that requires updating at a particualr engine angle. */
 
-typedef void (*trigger_36_1_state_handler)(trigger_wheel_36_1_context_st * const context, 
-                                           uint32_t const timestamp);
+typedef void (* trigger_36_1_state_handler)(trigger_wheel_36_1_context_st * const context, 
+                                            uint32_t const timestamp);
 
-typedef float (*trigger_36_1_angle_get_handler)(trigger_wheel_36_1_context_st * const context, bool const engine_angle);
+typedef float (* trigger_36_1_angle_get_handler)(trigger_wheel_36_1_context_st * const context, bool const engine_angle);
+typedef float (* trigger_36_1_rotation_time_get_handler)(trigger_wheel_36_1_context_st * const context, float const rotation_angle);
 
 typedef struct event_st event_st;
 
@@ -54,6 +56,7 @@ struct trigger_wheel_36_1_context_st
     trigger_36_1_state_handler crank_trigger_state_handler;
     trigger_36_1_state_handler cam_trigger_state_handler;
     trigger_36_1_angle_get_handler angle_get_handler;
+    trigger_36_1_rotation_time_get_handler rotation_time_get_handler;
 
     uint32_t pulse_counter;
     uint32_t revolution_counter;
@@ -281,11 +284,30 @@ static float trigger_36_1_synched_angle_get(trigger_wheel_36_1_context_st * cons
     return crank_angle;
 }
 
+static float trigger_36_1_synched_rotation_time_get(trigger_wheel_36_1_context_st * const context, float const rotation_angle)
+{
+    return rpm_calcuator_get_time_to_rotate_angle(context->rpm_calculator, rotation_angle);
+}
+
+static float trigger_36_1_unsynched_rotation_time_get(trigger_wheel_36_1_context_st * const context, float const rotation_angle)
+{
+    (void)context;
+    (void)rotation_angle;
+
+    return NAN;
+}
+
+float trigger_36_1_rotation_time_get(trigger_wheel_36_1_context_st * const context, float const rotation_angle)
+{
+    return context->rotation_time_get_handler(context, rotation_angle);
+}
+
 static void set_unsynched(trigger_wheel_36_1_context_st * const context)
 {
     context->crank_trigger_state_handler = crank_trigger_wheel_state_not_synched_handler;
     context->cam_trigger_state_handler = cam_trigger_wheel_state_handler;
     context->angle_get_handler = trigger_36_1_unsynched_angle_get;
+    context->rotation_time_get_handler = trigger_36_1_unsynched_rotation_time_get;
     context->pulse_counter = 0;
     context->tooth_1 = NULL;
     rpm_calculator_init(context->rpm_calculator, rpm_smoothing_factor); 
@@ -296,6 +318,7 @@ static void set_synched(trigger_wheel_36_1_context_st * const context)
     context->crank_trigger_state_handler = crank_trigger_wheel_state_synched_handler;
     context->cam_trigger_state_handler = cam_trigger_wheel_state_handler; /* Doesn't change, but for consitency we'll include here. */
     context->angle_get_handler = trigger_36_1_synched_angle_get;
+    context->rotation_time_get_handler = trigger_36_1_synched_rotation_time_get;
     context->had_cam_signal = false; /* Still need a cam signal to know which half of the cycle the engine is in.
                                       */
     update_engine_angles(context);

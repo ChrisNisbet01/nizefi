@@ -139,6 +139,12 @@ static void handleNewSerialData( void )
 
                         printf("engine: %"PRIu32" %f\r\n", engine_cycle_angle_32, engine_cycle_angle);
                     }
+                    if (ch == 'i')
+                    {
+                        void print_injector_debug(void);
+
+                        print_injector_debug();
+                    }
                 }
 			}
 		}

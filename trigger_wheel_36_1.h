@@ -28,5 +28,6 @@ float trigger_36_1_rpm_get(trigger_wheel_36_1_context_st * const context);
 float trigger_36_1_crank_angle_get(trigger_wheel_36_1_context_st * const context);
 
 float trigger_36_1_engine_cycle_angle_get(trigger_wheel_36_1_context_st * const context);
+float trigger_36_1_rotation_time_get(trigger_wheel_36_1_context_st * const context, float const rotation_angle);
 
 #endif /* __TRIGGER_WHEEL_36_1_H__ */

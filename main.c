@@ -42,8 +42,10 @@
 #include "hi_res_timer.h"
 #include "serial_task.h"
 #include "queue.h"
+#include "utils.h"
 
 #include <math.h>
+#include <inttypes.h>
 
 /*---------------------------- Symbol Define -------------------------------*/
 
@@ -161,16 +163,77 @@ static void init_leds(void)
 #endif
 }
 
+unsigned int get_engine_cycle_degrees(void)
+{
+    /* TODO: Calculate from configuration (two stroke/four stroke). */
+    return 720;
+}
+
+float get_injector_close_angle(void)
+{
+    /* TODO: Calculate from configuration. */
+
+    return -50.0;
+}
  
-void injector_pulse_callback(float const crank_angle, 
+uint32_t get_injector_pulse_width_us(void)
+{
+    /* TODO - Calculate pulse width. */
+    return 800;
+}
+
+float get_injector_dead_time(void)
+{
+    /* TODO - Calculate from battery voltage and configuration table. */
+    return 0.0005;
+}
+
+/* Store some debug values */
+static uint32_t debug_injector_us_until_open;
+static uint32_t debug_injector_pulse_width_us;
+float debug_injector_close_angle_atdc;
+float debug_injector_scheduling_angle;
+float debug_time_to_next_injector_close;
+
+void print_injector_debug(void)
+{
+    printf("delay %"PRIu32" width %"PRIu32"\r\n", debug_injector_us_until_open, debug_injector_pulse_width_us);
+    printf("close angle %f scheduling angle %f time to close %f\r\n", 
+           debug_injector_close_angle_atdc,
+           debug_injector_scheduling_angle,
+           debug_time_to_next_injector_close);
+}
+
+void injector_pulse_callback(float const crank_angle,
                              uint32_t timestamp,
                              void * const user_arg)
 {
     injector_output_st * const injector = user_arg;
+    float const injector_close_angle_atdc = normalise_engine_cycle_angle(get_injector_close_angle()); /* Angle we want the injector closed. */
+    float const injector_scheduling_angle = trigger_36_1_engine_cycle_angle_get(trigger_context); /* Current engine angle. */
+    /* Determine how long it will take to rotate this many degrees. */
+    float const time_to_next_injector_close = trigger_36_1_rotation_time_get(trigger_context, 
+                                                                             (float)get_engine_cycle_degrees() - (injector_scheduling_angle - injector_close_angle_atdc));
+    uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();
+    uint32_t const injector_us_until_open = lrintf((get_injector_dead_time() + time_to_next_injector_close) * TIMER_FREQUENCY)
+                                            - injector_pulse_width_us;
+
     (void)crank_angle;
     (void)timestamp; 
 
-    injector_pulse_schedule(injector, 100, 4000);
+    debug_injector_close_angle_atdc = injector_close_angle_atdc;
+    debug_injector_scheduling_angle = injector_scheduling_angle;
+    debug_time_to_next_injector_close = time_to_next_injector_close;
+    debug_injector_us_until_open = injector_us_until_open;
+    debug_injector_pulse_width_us = injector_pulse_width_us;
+    /* Called roughly 360 degrees before the injector is due to close. */
+    injector_pulse_schedule(injector, injector_us_until_open, injector_pulse_width_us);
+}
+
+float get_ignition_advance(void)
+{
+    /* TODO get from configuration */
+    return 10.0; /* NB - value is in degrees BTDC. */
 }
 
 void ignition_pulse_callback(float const crank_angle,
@@ -204,6 +267,28 @@ static void get_ignition_outputs(void)
     }
 }
 
+static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trigger_context)
+{
+    unsigned int const num_injectors = num_injectors_get();
+    unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
+    float const degrees_per_cylinder_injection = (float)degrees_per_engine_cycle / num_injectors;
+    float const injector_close_angle_btdc = get_injector_close_angle();
+    float const injector_scheduling_angle = injector_close_angle_btdc;
+    size_t index;
+
+    /* By using the angle at which the injector closes there should be enough time to get the start of the injector pulse scheduled in. 
+       This is with the assumption that that the injector duty cycle never goes beyond something like 80-85%.
+    */
+    //for (index = 0; index < num_injectors; index++)
+    for (index = 0; index < 1; index++)
+    {
+        trigger_36_1_register_callback(trigger_context,
+                                       normalise_engine_cycle_angle(injector_scheduling_angle + (degrees_per_cylinder_injection * index)),
+                                       injector_pulse_callback,
+                                       injectors[index]);
+    }
+}
+
 int main(void)
 {
     SystemInit();
@@ -230,10 +315,7 @@ int main(void)
     /* temp debug do some output pulses at various times in the 
      * engine cycle. 
      */
-    trigger_36_1_register_callback(trigger_context, 0.0, injector_pulse_callback, injectors[0]);
-    trigger_36_1_register_callback(trigger_context, 180.0, injector_pulse_callback, injectors[1]);
-    trigger_36_1_register_callback(trigger_context, 360.0, injector_pulse_callback, injectors[2]);
-    trigger_36_1_register_callback(trigger_context, 540.0, injector_pulse_callback, injectors[3]);
+    setup_injector_scheduling(trigger_context);
 
     trigger_36_1_register_callback(trigger_context, 20.0, ignition_pulse_callback, ignitions[0]);
     trigger_36_1_register_callback(trigger_context, 200.0, ignition_pulse_callback, ignitions[1]);

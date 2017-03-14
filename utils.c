@@ -21,8 +21,8 @@ float normalise_crank_angle(float const crank_angle)
     return normalise_angle(crank_angle, 360.0);
 }
 
-float normalise_engine_cycle_angle(float const crank_angle)
+float normalise_engine_cycle_angle(float const angle)
 {
-    return normalise_angle(crank_angle, 720.0);
+    return normalise_angle(angle, 720.0);
 }
 
