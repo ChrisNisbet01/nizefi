@@ -209,23 +209,29 @@ void injector_pulse_callback(float const crank_angle,
                              void * const user_arg)
 {
     injector_output_st * const injector = user_arg;
+#if 0
     float const injector_close_angle_atdc = normalise_engine_cycle_angle(get_injector_close_angle()); /* Angle we want the injector closed. */
     float const injector_scheduling_angle = trigger_36_1_engine_cycle_angle_get(trigger_context); /* Current engine angle. */
     /* Determine how long it will take to rotate this many degrees. */
-    float const time_to_next_injector_close = trigger_36_1_rotation_time_get(trigger_context, 
+    float const time_to_next_injector_close = trigger_36_1_rotation_time_get(trigger_context,
                                                                              (float)get_engine_cycle_degrees() - (injector_scheduling_angle - injector_close_angle_atdc));
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();
     uint32_t const injector_us_until_open = lrintf((get_injector_dead_time() + time_to_next_injector_close) * TIMER_FREQUENCY)
-                                            - injector_pulse_width_us;
+    - injector_pulse_width_us;
 
     (void)crank_angle;
-    (void)timestamp; 
+    (void)timestamp;
 
     debug_injector_close_angle_atdc = injector_close_angle_atdc;
     debug_injector_scheduling_angle = injector_scheduling_angle;
     debug_time_to_next_injector_close = time_to_next_injector_close;
     debug_injector_us_until_open = injector_us_until_open;
     debug_injector_pulse_width_us = injector_pulse_width_us;
+#else
+    uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();
+    uint32_t const injector_us_until_open = 100; 
+
+#endif
     /* Called roughly 360 degrees before the injector is due to close. */
     injector_pulse_schedule(injector, injector_us_until_open, injector_pulse_width_us);
 }

@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <inttypes.h>
 #include <math.h>
+#include <stdio.h>
 
 #define NUM_TEETH 35
 #define NUM_MISSING_TEETH 1
@@ -470,6 +471,7 @@ static bool validate_tooth_interval(unsigned int tooth_number,
      */
     if (this_delta > TIMER_FREQUENCY)
     {
+        printf("1 %"PRIu32"\r\n", this_delta);
         tooth_interval_is_valid = false;
         goto done;
     }
@@ -478,6 +480,7 @@ static bool validate_tooth_interval(unsigned int tooth_number,
     {
         if (!is_second_tooth_after_skip_tooth(this_delta, previous_delta))
         {
+            printf("2 %"PRIu32" %"PRIu32"\r\n", this_delta, previous_delta);
             tooth_interval_is_valid = false;
             goto done;
         }
@@ -486,12 +489,14 @@ static bool validate_tooth_interval(unsigned int tooth_number,
     {
         if (!interval_matches_skip_tooth(this_delta, previous_delta))
         {
+            printf("3 %"PRIu32" %"PRIu32"\r\n", this_delta, previous_delta);
             tooth_interval_is_valid = false;
             goto done;
         }
     }
     else if (!interval_matches_previous_tooth(this_delta, previous_delta))
     {
+        printf("4 %"PRIu32" %"PRIu32"\r\n", this_delta, previous_delta);
         tooth_interval_is_valid = false;
         goto done;
     }
