@@ -212,7 +212,7 @@ static timer_st const timers[] =
 
 static timer_context_st timer_context;
 
-static void initTimerTimeBase(TIM_TypeDef * tim, uint_fast16_t period, uint_fast32_t frequency_hz, bool const use_PCLK2)
+static void initTimerTimeBase(TIM_TypeDef * tim, uint_fast32_t period, uint_fast32_t frequency_hz, bool const use_PCLK2)
 {
     TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
     uint32_t CLK_Frequency;
@@ -258,7 +258,7 @@ static void timer_init(timer_st const * const timer, uint32_t frequency)
     /* TIMx clock enable */
     timer->RCC_APBPeriphClockCmd(timer->RCC_APBPeriph, ENABLE);
 
-    initTimerTimeBase(timer->TIM, 0xffff, frequency, timer->use_PCLK2);
+    initTimerTimeBase(timer->TIM, 0xffffffff, frequency, timer->use_PCLK2);
 
     /* Enable TIM4 Interrupt */
     NVIC_InitStructure.NVIC_IRQChannel = timer->IRQ_channel;
