@@ -198,7 +198,7 @@ float debug_time_to_next_injector_close;
 void print_injector_debug(void)
 {
     printf("delay %"PRIu32" width %"PRIu32"\r\n", debug_injector_us_until_open, debug_injector_pulse_width_us);
-    printf("close angle %f scheduling angle %f time to close %f\r\n", 
+    printf("close angle %f scheduling angle %f time to close %f\r\n",
            debug_injector_close_angle_atdc,
            debug_injector_scheduling_angle,
            debug_time_to_next_injector_close);
@@ -209,7 +209,7 @@ void injector_pulse_callback(float const crank_angle,
                              void * const user_arg)
 {
     injector_output_st * const injector = user_arg;
-#if 0
+#if 1
     float const injector_close_angle_atdc = normalise_engine_cycle_angle(get_injector_close_angle()); /* Angle we want the injector closed. */
     float const injector_scheduling_angle = trigger_36_1_engine_cycle_angle_get(trigger_context); /* Current engine angle. */
     /* Determine how long it will take to rotate this many degrees. */
@@ -279,13 +279,14 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
     float const degrees_per_cylinder_injection = (float)degrees_per_engine_cycle / num_injectors;
     float const injector_close_angle_btdc = get_injector_close_angle();
-    float const injector_scheduling_angle = injector_close_angle_btdc;
+    float const injector_scheduling_angle = injector_close_angle_btdc + 10;
     size_t index;
 
     /* By using the angle at which the injector closes there should be enough time to get the start of the injector pulse scheduled in. 
        This is with the assumption that that the injector duty cycle never goes beyond something like 80-85%.
     */
-    for (index = 0; index < num_injectors; index++)
+    //for (index = 0; index < num_injectors; index++)
+    for (index = 0; index < 1; index++)
     {
         trigger_36_1_register_callback(trigger_context,
                                        normalise_engine_cycle_angle(injector_scheduling_angle + (degrees_per_cylinder_injection * index)),
