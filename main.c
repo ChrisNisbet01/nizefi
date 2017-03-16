@@ -194,6 +194,8 @@ static uint32_t debug_injector_pulse_width_us;
 float debug_injector_close_angle_atdc;
 float debug_injector_scheduling_angle;
 float debug_time_to_next_injector_close;
+uint32_t debug_latency;
+uint32_t debug_timer_base_count;
 
 void print_injector_debug(void)
 {
@@ -202,6 +204,7 @@ void print_injector_debug(void)
            debug_injector_close_angle_atdc,
            debug_injector_scheduling_angle,
            debug_time_to_next_injector_close);
+    printf("latency %"PRIu32" base %"PRIu32"\r\n", debug_latency, debug_timer_base_count);
 }
 
 void injector_pulse_callback(float const crank_angle,
@@ -218,10 +221,15 @@ void injector_pulse_callback(float const crank_angle,
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();
     uint32_t const injector_us_until_open = lrintf((get_injector_dead_time() + time_to_next_injector_close) * TIMER_FREQUENCY)
     - injector_pulse_width_us;
+    uint32_t const latency = hi_res_counter_val() - timestamp;
+    uint32_t const injector_timer_count = injector_timer_count_get(injector);
+    uint32_t const timer_base_count = injector_timer_count - latency; /* This is the time from which we base the injector event. */
 
     (void)crank_angle;
     (void)timestamp;
 
+    debug_latency = latency;
+    debug_timer_base_count = timer_base_count;
     debug_injector_close_angle_atdc = injector_close_angle_atdc;
     debug_injector_scheduling_angle = injector_scheduling_angle;
     debug_time_to_next_injector_close = time_to_next_injector_close;
@@ -233,7 +241,7 @@ void injector_pulse_callback(float const crank_angle,
 
 #endif
     /* Called roughly 360 degrees before the injector is due to close. */
-    injector_pulse_schedule(injector, injector_us_until_open, injector_pulse_width_us);
+    injector_pulse_schedule(injector, timer_base_count, injector_us_until_open, injector_pulse_width_us);
 }
 
 float get_ignition_advance(void)
@@ -250,7 +258,7 @@ void ignition_pulse_callback(float const crank_angle,
     (void)crank_angle;
     (void)timestamp; 
 
-    ignition_pulse_schedule(ignition, 100, 2000);
+    ignition_pulse_schedule(ignition, ignition_timer_count_get(ignition), 100, 2000);
 }
 
 static void get_injector_outputs(void)
@@ -279,7 +287,7 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
     float const degrees_per_cylinder_injection = (float)degrees_per_engine_cycle / num_injectors;
     float const injector_close_angle_btdc = get_injector_close_angle();
-    float const injector_scheduling_angle = injector_close_angle_btdc + 10;
+    float const injector_scheduling_angle = injector_close_angle_btdc + 20.0; /* Temp debug add in some slack to help prevent event overlap. */
     size_t index;
 
     /* By using the angle at which the injector closes there should be enough time to get the start of the injector pulse scheduled in. 
@@ -292,6 +300,32 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
                                        normalise_engine_cycle_angle(injector_scheduling_angle + (degrees_per_cylinder_injection * index)),
                                        injector_pulse_callback,
                                        injectors[index]);
+    }
+}
+
+float get_ignition_spark_angle_btdc(void)
+{
+    return 10.0;
+
+}
+static void setup_ignition_scheduling(trigger_wheel_36_1_context_st * const trigger_context)
+{
+    unsigned int const num_injectors = num_ignition_outputs_get();
+    unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
+    float const degrees_per_cylinder_ignition = (float)degrees_per_engine_cycle / num_injectors;
+    float const spark_angle_btdc = get_ignition_spark_angle_btdc();
+    float const ignition_scheduling_angle = normalise_engine_cycle_angle(720.0 - 360.0 - spark_angle_btdc);
+    size_t index;
+
+    /* By doing the scheduling 1 revolution before the spark there should be enough time to get the start of the igntion pulse scheduled in. 
+    */
+    //for (index = 0; index < num_injectors; index++)
+    for (index = 0; index < 1; index++)
+    {
+        trigger_36_1_register_callback(trigger_context,
+                                       normalise_engine_cycle_angle(ignition_scheduling_angle + (degrees_per_cylinder_ignition * index)),
+                                       ignition_pulse_callback,
+                                       ignitions[index]);
     }
 }
 
@@ -323,10 +357,10 @@ int main(void)
      */
     setup_injector_scheduling(trigger_context);
 
-    trigger_36_1_register_callback(trigger_context, 20.0, ignition_pulse_callback, ignitions[0]);
-    trigger_36_1_register_callback(trigger_context, 200.0, ignition_pulse_callback, ignitions[1]);
-    trigger_36_1_register_callback(trigger_context, 380.0, ignition_pulse_callback, ignitions[2]);
-    trigger_36_1_register_callback(trigger_context, 560.0, ignition_pulse_callback, ignitions[3]);
+    trigger_36_1_register_callback(trigger_context, 360.0, ignition_pulse_callback, ignitions[0]);
+    trigger_36_1_register_callback(trigger_context, 540.0, ignition_pulse_callback, ignitions[1]);
+    trigger_36_1_register_callback(trigger_context, 0.0, ignition_pulse_callback, ignitions[2]);
+    trigger_36_1_register_callback(trigger_context, 180.0, ignition_pulse_callback, ignitions[3]);
 
     init_trigger_signals(trigger_context); /* Done after CoInitOS() as it uses CoOS resources. */
 
@@ -335,9 +369,5 @@ int main(void)
 
     CoStartOS(); /* Start scheduler. */
 
-    //printf("CoOS RTOS: Scheduler stopped\n");
-    while (1)
-    {
-    }
 }
 

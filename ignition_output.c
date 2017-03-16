@@ -126,9 +126,15 @@ done:
 }
 
 void ignition_pulse_schedule(ignition_output_st * const ignition_output,
-                             uint32_t initial_delay_us,
-                             uint16_t pulse_us)
+                             uint32_t const base_count,
+                             uint32_t const initial_delay_us,
+                             uint16_t const pulse_us)
 {
-    pulsed_output_schedule(ignition_output->pulsed_output, initial_delay_us, pulse_us);
+    pulsed_output_schedule(ignition_output->pulsed_output, base_count, initial_delay_us, pulse_us);
+}
+
+uint32_t ignition_timer_count_get(ignition_output_st const * const injector_output)
+{
+    return pulse_output_timer_count_get(injector_output->pulsed_output);
 }
 

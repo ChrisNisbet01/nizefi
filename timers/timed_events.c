@@ -260,7 +260,7 @@ static void timer_init(timer_st const * const timer, uint32_t frequency)
 
     initTimerTimeBase(timer->TIM, 0xffffffff, frequency, timer->use_PCLK2);
 
-    /* Enable TIM4 Interrupt */
+    /* Enable timer interrupt */
     NVIC_InitStructure.NVIC_IRQChannel = timer->IRQ_channel;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;

@@ -210,10 +210,11 @@ void schedule_pulse(pulser_st * const context, uint32_t const base_time, uint32_
 }
 
 void pulse_start(pulser_st * const context,
+                 uint32_t base_count,
                  uint32_t initial_delay_us, 
                  uint_fast16_t pulse_us)
 {
-    schedule_pulse(context, timer_channel_get_current_time(context->timer_context), initial_delay_us, pulse_us);
+    schedule_pulse(context, base_count, initial_delay_us, pulse_us);
 }
 
 pulser_st * pulser_get(pulser_callback const active_callback,
@@ -281,6 +282,11 @@ void init_pulsers(void)
     }
 }
 
+uint32_t pulser_timer_count_get(pulser_st const * const pulser)
+{
+    return timer_channel_get_current_time(pulser->timer_context);
+}
+
 void print_pulse_details(void)
 {
 #if defined(PULSE_DEBUG)
@@ -322,3 +328,4 @@ void reset_pulse_details(void)
     }
 #endif
 }
+

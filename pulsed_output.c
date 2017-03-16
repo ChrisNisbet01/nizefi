@@ -64,9 +64,14 @@ done:
 }
 
 void pulsed_output_schedule(pulsed_output_st * const pulsed_output,
+                            uint32_t base_count,
                             uint32_t initial_delay_us,
                             uint_fast16_t pulse_us)
 {
-    pulse_start(pulsed_output->pulser, initial_delay_us, pulse_us);
+    pulse_start(pulsed_output->pulser, base_count, initial_delay_us, pulse_us);
 }
 
+uint32_t pulse_output_timer_count_get(pulsed_output_st const * const pulsed_output)
+{
+    return pulser_timer_count_get(pulsed_output->pulser);
+}
