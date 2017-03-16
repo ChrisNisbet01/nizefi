@@ -2,6 +2,7 @@
 #include "trigger_wheel_36_1.h"
 #include "queue.h"
 #include "hi_res_timer.h"
+#include "leds.h"
 #include <CoOS.h>
 #include <OsArch.h>
 
@@ -11,6 +12,10 @@
 #include "stm32f4xx_syscfg.h"
 
 #include <stddef.h>
+#include <inttypes.h>
+#include <stdio.h>
+
+#define USE_FLAG_METHOD
 
 /* 
     Note:
@@ -52,20 +57,43 @@ static trigger_signal_st cam_trigger_signals[CAM_TRIGGER_SIGNAL_QUEUE_LEN];
 
 #define TOTAL_TRIGGER_SIGNAL_LEN (CRANK_TRIGGER_SIGNAL_QUEUE_LEN + CAM_TRIGGER_SIGNAL_QUEUE_LEN)
 
-static trigger_signal_st * trigger_signal_queue[TOTAL_TRIGGER_SIGNAL_LEN];
+typedef STAILQ_HEAD(trigger_signal_list, trigger_signal_st) trigger_signal_list;
 
-OS_EventID trigger_signal_message_queue_id;
+#if defined(USE_FLAG_METHOD)
+static OS_FlagID trigger_message_queue_flag;
+static trigger_signal_list pending_trigger_signal_list; 
+#else
+static trigger_signal_st * trigger_signal_queue[TOTAL_TRIGGER_SIGNAL_LEN];
+static OS_EventID trigger_signal_message_queue_id;
+#endif
+
 /* TODO: Need a trigger input context with fields for the 
  * trigger context and the crank and cam callbacks which are 
  * yet to be supported. 
  */
 static trigger_wheel_36_1_context_st * trigger_context;
 
-typedef STAILQ_HEAD(trigger_signal_list, trigger_signal_st) trigger_signal_list;
-
 static trigger_signal_list crank_trigger_signal_free_list;
 static trigger_signal_list cam_trigger_signal_free_list;
 
+/* NB - Connected to SPI SCL pin on STM32F4-Disc1 board. 
+   Does that matter? */
+
+#define CRANK_USES_INPUT_CAPTURE /* Else uses external IRQ as defined below. Note connected to pin A5. */
+
+#define CRANK_ON_PIN_A0
+#if defined CRANK_ON_PIN_A0
+static const trigger_gpio_config_st crank_trigger_gpio_config =
+{
+    .RCC_AHBPeriph = RCC_AHB1Periph_GPIOA,
+    .port = GPIOA,
+    .pin = GPIO_Pin_0,
+    .EXTI_PortSource = EXTI_PortSourceGPIOA,
+    .EXTI_PinSource = EXTI_PinSource0,
+    .EXTI_Line = EXTI_Line0,
+    .NVIC_IRQChannel = EXTI0_IRQn
+};
+#else
 static const trigger_gpio_config_st crank_trigger_gpio_config =
 {
     .RCC_AHBPeriph = RCC_AHB1Periph_GPIOA,
@@ -76,6 +104,7 @@ static const trigger_gpio_config_st crank_trigger_gpio_config =
     .EXTI_Line = EXTI_Line5,
     .NVIC_IRQChannel = EXTI9_5_IRQn
 };
+#endif
 
 static const trigger_gpio_config_st cam_trigger_gpio_config =
 {
@@ -92,12 +121,17 @@ static trigger_signal_st * trigger_signal_get(trigger_signal_list * const list_h
 {
     /* This function is called from within an IRQ. Entries are placed back into the queue with interrupts disabled.
     */
-    trigger_signal_st * const trigger_signal = STAILQ_FIRST(list_head);
+    trigger_signal_st * trigger_signal;
 
+    IRQ_DISABLE_SAVE();
+
+    trigger_signal = STAILQ_FIRST(list_head);
     if (trigger_signal != NULL)
     {
         STAILQ_REMOVE_HEAD(list_head, entry);
     }
+
+    IRQ_ENABLE_RESTORE(); 
 
     return trigger_signal;
 }
@@ -139,19 +173,43 @@ static void handle_trigger_signal(trigger_signal_st * const trigger_signal,
     trigger_signal->timestamp = timestamp;
     trigger_signal->source = source;
 
+#if defined(USE_FLAG_METHOD)
+    trigger_signal_put(&pending_trigger_signal_list, trigger_signal);
+#endif
+
     CoEnterISR();
 
+#if defined(USE_FLAG_METHOD)
+    isr_SetFlag(trigger_message_queue_flag);
+#else
     isr_PostQueueMail(trigger_signal_message_queue_id, trigger_signal);
+#endif
 
     CoExitISR();
+}
+
+static volatile uint32_t last_timestamp;
+static volatile uint32_t trigger_count;
+static volatile uint32_t last_trigger_count;
+
+void print_trigger_debug(void)
+{
+    printf("count %"PRIu32"\r\n", last_trigger_count);
 }
 
 static void handle_crank_trigger_signal(uint32_t const timestamp)
 {
     trigger_signal_st * const trigger_signal = crank_trigger_signal_get();
 
+    trigger_count++;
     if (trigger_signal != NULL)
     {
+        if ((timestamp - last_timestamp) > 600)
+        {
+            last_trigger_count = trigger_count;
+            trigger_count = 0;
+        }
+        last_timestamp = timestamp;
         handle_trigger_signal(trigger_signal,
                               trigger_signal_source_crank, 
                               timestamp);
@@ -170,7 +228,7 @@ static void handle_cam_trigger_signal(uint32_t const timestamp)
     }
 }
 
-/* Handle PA0 interrupt. */
+/* Handle external interrupt. */
 void EXTI0_IRQHandler(void)
 {
     uint32_t timestamp = hi_res_counter_val();
@@ -242,8 +300,18 @@ static void init_cam_trigger_signal_list(void)
     init_trigger_signal_list(&cam_trigger_signal_free_list, cam_trigger_signals, CAM_TRIGGER_SIGNAL_QUEUE_LEN);
 }
 
+#if defined(USE_FLAG_METHOD)
+static void init_pending_trigger_signal_list(void)
+{
+    STAILQ_INIT(&pending_trigger_signal_list);
+}
+#endif
+
 static void init_trigger_signal_lists(void)
 {
+#if defined(USE_FLAG_METHOD)
+    init_pending_trigger_signal_list();
+#endif
     init_crank_trigger_signal_list();
     init_cam_trigger_signal_list();
 }
@@ -273,25 +341,58 @@ float engine_cycle_angle_get(void)
     return trigger_36_1_engine_cycle_angle_get(trigger_context);
 }
 
+trigger_signal_st * pend_on_trigger_message(void)
+{
+    trigger_signal_st * trigger_signal;
+#if defined(USE_FLAG_METHOD)
+
+    do
+    {
+        trigger_signal = trigger_signal_get(&pending_trigger_signal_list);
+        if (trigger_signal == NULL)
+        {
+            CoWaitForSingleFlag(trigger_message_queue_flag, 0);
+        }
+    }
+    while (trigger_signal == NULL);
+#else
+    StatusType err;
+
+    trigger_signal = CoPendQueueMail(trigger_signal_message_queue_id, 0, &err);
+#endif
+
+    return trigger_signal;
+}
+
 void trigger_input_task(void * pdata)
 {
-    OS_EventID message_queue_id = *(OS_EventID *)pdata;
+    uint32_t last_timestamp = 0;
+    uint32_t last_last_timestamp = 0;
+    (void)pdata;
 
     while (1)
     {
-        StatusType err;
         trigger_signal_st * trigger_signal;
         uint32_t timestamp;
+        int32_t delta;
         trigger_signal_source_t trigger_source;
 
-        trigger_signal =  CoPendQueueMail(message_queue_id, 0, &err);
+        trigger_signal = pend_on_trigger_message();
 
         timestamp = trigger_signal->timestamp;
+        delta = timestamp - last_timestamp; 
         trigger_source = trigger_signal->source;
 
         switch (trigger_source)
         {
             case trigger_signal_source_crank:
+                if (delta <= 0)
+                {
+                    GPIO_ToggleBits(GPIOD, BLUE_LED);
+                    printf("%"PRIu32" %"PRIu32" %"PRIu32"\r\n", timestamp, last_timestamp, last_last_timestamp);
+                }
+                last_last_timestamp = last_timestamp;
+                last_timestamp = timestamp;
                 crank_trigger_signal_put(trigger_signal);
                 trigger_36_1_handle_crank_pulse(trigger_context, timestamp);
                 break;
@@ -384,7 +485,15 @@ static void configure_gpio_external_irq(trigger_gpio_config_st const * const gpi
 
 static void initialise_crank_trigger_input(void)
 {
+#if defined(CRANK_USES_INPUT_CAPTURE)
     register_crank_trigger_callback(handle_crank_trigger_signal);
+#else
+    trigger_gpio_config_st const * const gpio_config = &crank_trigger_gpio_config;
+
+    configure_gpio_pin(gpio_config);
+
+    configure_gpio_external_irq(gpio_config);
+#endif
 }
 
 static void initialise_cam_trigger_input(void)
@@ -410,7 +519,11 @@ void init_trigger_signals(trigger_wheel_36_1_context_st * const trigger_wheel_co
      */
     init_trigger_signal_lists(); 
 
+#if defined(USE_FLAG_METHOD)
+    trigger_message_queue_flag = CoCreateFlag(Co_TRUE, Co_FALSE);
+#else
     trigger_signal_message_queue_id = CoCreateQueue((void * *)&trigger_signal_queue, TOTAL_TRIGGER_SIGNAL_LEN, EVENT_SORT_TYPE_FIFO);
+#endif
 
     /* XXX - FIXME. Get trigger wheel decoder to register for 
      * trigger events from this module. Also support enabling and 
@@ -419,7 +532,7 @@ void init_trigger_signals(trigger_wheel_36_1_context_st * const trigger_wheel_co
     trigger_context = trigger_wheel_context;
 
     CoCreateTask(trigger_input_task,
-                 &trigger_signal_message_queue_id,
+                 NULL,
                  1,
                  &trigger_signal_task_stack[TRIGGER_SIGNAL_TASK_STACK_SIZE - 1],
                  TRIGGER_SIGNAL_TASK_STACK_SIZE);

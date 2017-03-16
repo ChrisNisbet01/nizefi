@@ -348,7 +348,7 @@ static bool is_second_tooth_after_skip_tooth(uint32_t const this_delta, uint32_t
 
 static bool interval_matches_previous_tooth(uint32_t const this_delta, uint32_t const previous_delta)
 {
-    return (this_delta <= single_tooth_change_high_limit(previous_delta * 18))
+    return (this_delta <= single_tooth_change_high_limit(previous_delta))
     && (this_delta > single_tooth_change_low_limit(previous_delta));
 }
 
@@ -374,8 +374,17 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
     else if (context->pulse_counter == 2)
     {
         tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
+        int32_t time_since_previous_tooth = timestamp - previous_tooth->timestamp; 
 
-        current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
+        if (time_since_previous_tooth > 0)
+        {
+            current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
+        }
+        else
+        {
+            current_tooth->time_since_previous_tooth = 0;
+            context->pulse_counter = 1;
+        }
         /* Not much else that can be done until another trigger signal 
          * comes in. 
          */
@@ -383,36 +392,44 @@ static void crank_trigger_wheel_state_not_synched_handler(trigger_wheel_36_1_con
     else
     {
         tooth_context_st * previous_tooth = previous_tooth_get(context, current_tooth);
+        int32_t time_since_previous_tooth = timestamp - previous_tooth->timestamp; 
 
-        current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
+        if (time_since_previous_tooth > 0)
+        {
+            current_tooth->time_since_previous_tooth = time_since_previous_tooth;
 
-        if (is_second_tooth_after_skip_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
-        {
-            /* Just had a pulse with much shorter delta than the previous. 
-             * This is probably tooth #2, which would make the previous 
-             * tooth #1.
-             */
-            context->tooth_1 = previous_tooth;
-            context->tooth_number = 2;
-            context->timestamp = timestamp;
-            context->second_revolution = !context->had_cam_signal; 
-            set_synched(context);
+            if (is_second_tooth_after_skip_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
+            {
+                /* Just had a pulse with much shorter delta than the previous. 
+                 * This is probably tooth #2, which would make the previous 
+                 * tooth #1.
+                 */
+                context->tooth_1 = previous_tooth;
+                context->tooth_number = 2;
+                context->timestamp = timestamp;
+                context->second_revolution = !context->had_cam_signal;
+                set_synched(context);
+            }
+            else if (interval_matches_previous_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
+            {
+                /* Time between signals is similar to the previous one. Still 
+                   waiting for skip tooth. */
+            }
+            else if (interval_matches_skip_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
+            {
+                /* Time between signals is about what we expect for a skip 
+                 * tooth. That would make this tooth #1.
+                 */
+                context->tooth_1 = current_tooth; /* Set to previous tooth because the next tooth is */
+                context->tooth_number = 1;
+                context->timestamp = timestamp;
+                context->second_revolution = !context->had_cam_signal;
+                set_synched(context);
+            }
         }
-        else if (interval_matches_previous_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
+        else
         {
-            /* Time between signals is similar to the previous one. Still 
-               waiting for skip tooth. */
-        }
-        else if (interval_matches_skip_tooth(current_tooth->time_since_previous_tooth, previous_tooth->time_since_previous_tooth))
-        {
-            /* Time between signals is about what we expect for a skip 
-             * tooth. That would make this tooth #1.
-             */
-            context->tooth_1 = current_tooth; /* Set to previous tooth because the next tooth is */
-            context->tooth_number = 1;
-            context->timestamp = timestamp;
-            context->second_revolution = !context->had_cam_signal;
-            set_synched(context);
+            /* Something bad is happening.*/ 
         }
     }
 
@@ -461,14 +478,22 @@ static void execute_engine_cycle_events(trigger_wheel_36_1_context_st * const co
 }
 
 static bool validate_tooth_interval(unsigned int tooth_number,
-                                    uint32_t const this_delta,
-                                    uint32_t const previous_delta)
+                                    int32_t const this_delta,
+                                    int32_t const previous_delta,
+                                    uint32_t * const missed_tooth_delta)
 {
     bool tooth_interval_is_valid;
 
     /* If it has been more than 1 second since the last trigger 
      * input we'll go to lost sych state. 
      */
+    if (this_delta <= 0)
+    {
+        printf("-ve %"PRId32"\r\n", this_delta);
+        tooth_interval_is_valid = false;
+        goto done;
+    }
+
     if (this_delta > TIMER_FREQUENCY)
     {
         printf("1 %"PRIu32"\r\n", this_delta);
@@ -497,6 +522,16 @@ static bool validate_tooth_interval(unsigned int tooth_number,
     else if (!interval_matches_previous_tooth(this_delta, previous_delta))
     {
         printf("4 %"PRIu32" %"PRIu32"\r\n", this_delta, previous_delta);
+
+        /* Maybe if it's just a single missed tooth we can recover 
+         * from this by pretending we got the tooth half this delta's 
+         * time ago. Need to be careful to check that this is a 
+         * one-off/rare thing (maybe once per few thousand signals). 
+         */
+        if (missed_tooth_delta != NULL && interval_matches_skip_tooth(this_delta, previous_delta))
+        {
+            *missed_tooth_delta = this_delta / 2;
+        }
         tooth_interval_is_valid = false;
         goto done;
     }
@@ -515,18 +550,34 @@ static void crank_trigger_wheel_state_synched_handler(trigger_wheel_36_1_context
     uint32_t const last_revolution_timestamp = current_tooth->timestamp;
     unsigned int tooth_number;
     bool lost_synch = false;
+    uint32_t missed_tooth_delta = 0;
+    int32_t time_since_previous_tooth;
 
     context->pulse_counter++;
     current_tooth->timestamp = timestamp;
-    current_tooth->time_since_previous_tooth = timestamp - previous_tooth->timestamp;
+    time_since_previous_tooth = timestamp - previous_tooth->timestamp;
 
+    /* XXX - It appears that some interrupts are missed. Why? Poor 
+     * signal quality? Poor code? Too much CPU load? (surely not). 
+     * And why are the missed interrupts so regular? i.e. they seem 
+     * to arrive at a rate of about 50 per timer rollover, so about 
+     * once every 85 seconds. Can almost set your clock by them? Due 
+     * to external signal or internal to CPU? 
+     * Hmm, I've just worked out that a 32 bit counter increasing at 
+     * a rate of 50MHz will roll over every ~85 seconds. 
+     * Coincidence? I think not. What's the STM32F3 timer clock rate
+     * CPU speed (whatever) I wonder?
+     */
     if (!validate_tooth_interval(context->tooth_number,
-                                 current_tooth->time_since_previous_tooth, 
-                                 previous_tooth->time_since_previous_tooth))
+                                 time_since_previous_tooth,
+                                 previous_tooth->time_since_previous_tooth,
+                                 &missed_tooth_delta))
     {
         lost_synch = true;
         goto done;
     }
+
+    current_tooth->time_since_previous_tooth = time_since_previous_tooth;
 
     /* It is expected that the cam signal arrives some time just 
      * before tooth #1 and before the start of the first half of the

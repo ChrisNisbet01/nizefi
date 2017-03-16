@@ -285,8 +285,7 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     /* By using the angle at which the injector closes there should be enough time to get the start of the injector pulse scheduled in. 
        This is with the assumption that that the injector duty cycle never goes beyond something like 80-85%.
     */
-    //for (index = 0; index < num_injectors; index++)
-    for (index = 0; index < 1; index++)
+    for (index = 0; index < num_injectors; index++)
     {
         trigger_36_1_register_callback(trigger_context,
                                        normalise_engine_cycle_angle(injector_scheduling_angle + (degrees_per_cylinder_injection * index)),
