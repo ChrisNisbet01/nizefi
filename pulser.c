@@ -29,7 +29,7 @@ struct pulser_st
     void * user_arg;
 
     /* TODO: Add support for overlapping pulses. It is entirely 
-     * poosible (when engine is highly loaded at high RPM) that 
+     * possible (when engine is highly loaded at high RPM) that 
      * one pulse could be scheduled when the previous hasn't 
      * completed. It should _not_ be possible for the new request 
      * to request a start time before the previous one finishes. 
@@ -37,6 +37,7 @@ struct pulser_st
      * account for the delay in starting the timer. 
      */
     uint_fast16_t active_us; /* The period of time the pulse should be active for. */
+    uint_fast16_t initial_delay_left_us;
 
 #if defined(PULSE_DEBUG)
     /* Some debug information. */
@@ -49,6 +50,9 @@ struct pulser_st
 
 static void pulser_initial_delay_isr_handler(pulser_st * context);
 static void pulser_initial_delay_task_handler(pulser_st * context);
+
+static void pulser_initial_delay_overflow_isr_handler(pulser_st * context);
+static void pulser_initial_delay_overflow_task_handler(pulser_st * context); 
 
 static void pulser_active_isr_handler(pulser_st * context);
 static void pulser_active_task_handler(pulser_st * context);
@@ -81,6 +85,29 @@ static void pulser_idle_isr_handler(pulser_st * context)
 static void pulser_idle_task_handler(pulser_st * context)
 {
     (void)context;
+}
+
+static void pulser_initial_delay_overflow_isr_handler(pulser_st * context)
+{
+    (void)context;
+}
+
+static void pulser_initial_delay_overflow_task_handler(pulser_st * context)
+{
+    (void)context;
+    if (context->initial_delay_left_us > 40000)
+    {
+        context->initial_delay_left_us -= 30000;
+        timer_channel_schedule_followup_event(context->timer_context, 30000); 
+    }
+    else
+    {
+        context->isr_state_handler =  pulser_initial_delay_isr_handler;
+        context->task_state_handler = pulser_initial_delay_task_handler;
+
+        timer_channel_schedule_followup_event(context->timer_context, context->initial_delay_left_us);
+        context->initial_delay_left_us = 0;
+    }
 }
 
 static void pulser_initial_delay_isr_handler(pulser_st * context)
@@ -153,9 +180,23 @@ void schedule_pulse(pulser_st * const context, uint32_t const base_time, uint32_
 {
     if (context->timer_context != NULL)
     {
-        context->isr_state_handler = pulser_initial_delay_isr_handler;
-        context->task_state_handler = pulser_initial_delay_task_handler;
-        context->active_us = pulse_us;
+        uint32_t initial_delay = initial_delay_us;
+        context->active_us = pulse_us; /* Remember the pulse width. */
+
+        if (initial_delay_us > 40000)
+        {
+            initial_delay = 30000;
+            context->initial_delay_left_us = initial_delay_us - 30000;
+            context->isr_state_handler = pulser_initial_delay_overflow_isr_handler;
+            context->task_state_handler = pulser_initial_delay_overflow_task_handler;
+        }
+        else
+        {
+            context->initial_delay_left_us = 0;
+            context->isr_state_handler = pulser_initial_delay_isr_handler;
+            context->task_state_handler = pulser_initial_delay_task_handler; 
+        }
+
 
 #if defined(PULSE_DEBUG)
         context->systick_at_start = 0;
@@ -164,7 +205,7 @@ void schedule_pulse(pulser_st * const context, uint32_t const base_time, uint32_
         context->systick_at_gpio_off_task = 0;
 #endif
 
-        timer_channel_schedule_new_based_event(context->timer_context, base_time, initial_delay_us);
+        timer_channel_schedule_new_based_event(context->timer_context, base_time, initial_delay);
     }
 }
 
