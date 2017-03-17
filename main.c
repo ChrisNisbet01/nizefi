@@ -196,15 +196,17 @@ float debug_injector_scheduling_angle;
 float debug_time_to_next_injector_close;
 uint32_t debug_latency;
 uint32_t debug_timer_base_count;
+int debug_injector_number;
 
 void print_injector_debug(void)
 {
+    printf("\r\ninj %d\r\n", debug_injector_number);
     printf("delay %"PRIu32" width %"PRIu32"\r\n", debug_injector_us_until_open, debug_injector_pulse_width_us);
     printf("close angle %f scheduling angle %f time to close %f\r\n",
            debug_injector_close_angle_atdc,
            debug_injector_scheduling_angle,
            debug_time_to_next_injector_close);
-    printf("latency %"PRIu32" base %"PRIu32"\r\n", debug_latency, debug_timer_base_count);
+    printf("latency %"PRIu32" base %"PRIu32"\r\n\r\n", debug_latency, debug_timer_base_count);
 }
 
 void injector_pulse_callback(float const crank_angle,
@@ -219,11 +221,11 @@ void injector_pulse_callback(float const crank_angle,
     float const time_to_next_injector_close = trigger_36_1_rotation_time_get(trigger_context,
                                                                              (float)get_engine_cycle_degrees() - (injector_scheduling_angle - injector_close_angle_atdc));
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();
-    uint32_t const injector_us_until_open = lrintf((get_injector_dead_time() + time_to_next_injector_close) * TIMER_FREQUENCY)
-    - injector_pulse_width_us;
+    uint32_t const injector_us_until_open = lrintf((time_to_next_injector_close - get_injector_dead_time()) * TIMER_FREQUENCY)
+                                                    - injector_pulse_width_us;
     uint32_t const latency = hi_res_counter_val() - timestamp;
     uint32_t const injector_timer_count = injector_timer_count_get(injector);
-    uint32_t const timer_base_count = injector_timer_count - latency; /* This is the time from which we base the injector event. */
+    uint32_t const timer_base_count = (injector_timer_count - latency) & 0xffff; /* This is the time from which we base the injector event. */
 
     (void)crank_angle;
     (void)timestamp;
@@ -241,6 +243,7 @@ void injector_pulse_callback(float const crank_angle,
     debug_time_to_next_injector_close = time_to_next_injector_close;
     debug_injector_us_until_open = injector_us_until_open;
     debug_injector_pulse_width_us = injector_pulse_width_us;
+    debug_injector_number = injector_number_get(injector);
 #else
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();
     uint32_t const injector_us_until_open = 100; 
@@ -280,7 +283,8 @@ static void get_injector_outputs(void)
 
     for (index = 0; index < num_injectors_get(); index++)
     {
-        injectors[index] = injector_output_get(normalise_engine_cycle_angle(injector_close_angle + (degrees_per_cylinder_injection * index)));
+        injectors[index] = injector_output_get(index,
+                                               normalise_engine_cycle_angle(injector_close_angle + (degrees_per_cylinder_injection * index)));
     }
 }
 
@@ -297,8 +301,6 @@ static void get_ignition_outputs(void)
 static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trigger_context)
 {
     unsigned int const num_injectors = num_injectors_get();
-    unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
-    float const degrees_per_cylinder_injection = (float)degrees_per_engine_cycle / num_injectors;
     size_t index;
 
     /* By using the angle at which the injector closes to schedule the next event there should be enough time to 
@@ -308,8 +310,10 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     for (index = 0; index < num_injectors; index++)
     {
         injector_output_st * const injector = injectors[index];
+        float const injector_close_to_schedule_delay = 0.0;
 
-        float const injector_scheduling_angle = normalise_engine_cycle_angle(injector_close_angle_get(injector) + 20.0); 
+        float const injector_scheduling_angle = normalise_engine_cycle_angle(injector_close_angle_get(injector) 
+                                                                             + injector_close_to_schedule_delay);
         /* Temp debug add in some slack to help prevent event overlap. 
            Means that injector duty is limited to 100  * (720-20) / 720%. 
          */
