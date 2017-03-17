@@ -6,10 +6,9 @@
 #include <math.h>
 
 #define RPM_TO_DEGREES_PER_SECOND_FACTOR 6.0
+#define MIN_SECONDS_BETWEEN_UPDATES 0.1
 
-typedef float (* rpm_calculator_update_fn)(rpm_calculator_st * const rpm_calculator, 
-                                           float const degrees_of_rotation, 
-                                           float const delta_seconds);
+typedef float (* rpm_calculator_update_fn)(rpm_calculator_st * const rpm_calculator);
 
 struct rpm_calculator_st
 {
@@ -19,6 +18,10 @@ struct rpm_calculator_st
     float smoothed_rpm;
     float smoothed_degrees_per_second;
     float degrees_per_second_acceleration;
+
+    float accumulated_degrees;
+    float accumulated_seconds;
+
 
     rpm_calculator_update_fn update_fn;
 }; 
@@ -52,22 +55,20 @@ static void rpm_calculator_calculate_rpm(rpm_calculator_st * const rpm_calculato
     /* TODO: Factor in the rate of change of the RPM. */
 }
 
-static float rpm_calculator_update_had_two_samples(rpm_calculator_st * const rpm_calculator,
-                                                   float const degrees_of_rotation, 
-                                                   float const delta_seconds)
+static float rpm_calculator_update_had_two_samples(rpm_calculator_st * const rpm_calculator)
 {
-    rpm_calculator_calculate_rpm(rpm_calculator, degrees_of_rotation, delta_seconds);
+    if (rpm_calculator->accumulated_seconds >= MIN_SECONDS_BETWEEN_UPDATES)
+    {
+        rpm_calculator_calculate_rpm(rpm_calculator, rpm_calculator->accumulated_degrees, rpm_calculator->accumulated_seconds);
+        rpm_calculator->accumulated_degrees = 0.0;
+        rpm_calculator->accumulated_seconds = 0.0;
+    }
 
     return rpm_calculator->smoothed_rpm;
 }
 
-static float rpm_calculator_update_no_samples(rpm_calculator_st * const rpm_calculator, 
-                                              float const degrees_of_rotation, 
-                                              float const delta_seconds)
+static float rpm_calculator_update_no_samples(rpm_calculator_st * const rpm_calculator)
 {
-    UNUSED(degrees_of_rotation);
-    UNUSED(delta_seconds);
-
     rpm_calculator->smoothed_rpm = 0.0;
     rpm_calculator->smoothed_degrees_per_second = 0.0;
     rpm_calculator->degrees_per_second_acceleration = 0.0;
@@ -80,7 +81,10 @@ float rpm_calculator_update(rpm_calculator_st * const rpm_calculator,
                             float const degrees_of_rotation, 
                             float const delta_seconds)
 {
-    return rpm_calculator->update_fn(rpm_calculator, degrees_of_rotation, delta_seconds);
+    rpm_calculator->accumulated_degrees += degrees_of_rotation;
+    rpm_calculator->accumulated_seconds += delta_seconds;
+
+    return rpm_calculator->update_fn(rpm_calculator);
 }
 
 float rpm_calculator_rpm_get(rpm_calculator_st * rpm_calculator)
@@ -122,9 +126,9 @@ float rpm_calcuator_get_time_to_rotate_angle(rpm_calculator_st * const rpm_calcu
      *   (degrees/sec), v1 is the initial velocity (degrees/sec),
      *   'a' is the acceleration (degrees/sec ^ 2), 's' the distance
      *   (degrees).
-     *   calculate v2
-     *   find average velocity.
-     *   time = angle / average velocity.
+     *   calculate v2  = sqrt(v1 ^ 2 + 2as)
+     *   - find average velocity.
+     *   - time = angle / average velocity.
      */
     float seconds;
     float temp;
@@ -166,6 +170,9 @@ void rpm_calculator_init(rpm_calculator_st * rpm_calculator,
     rpm_calculator->smoothed_rpm = 0.0;
     rpm_calculator->smoothed_degrees_per_second = 0.0;
     rpm_calculator->degrees_per_second_acceleration = 0.0;
+    rpm_calculator->accumulated_degrees = 0.0;
+    rpm_calculator->accumulated_seconds = 0.0; 
+
     rpm_calculator->update_fn = rpm_calculator_update_no_samples;
 }
 
