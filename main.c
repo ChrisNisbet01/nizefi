@@ -228,6 +228,12 @@ void injector_pulse_callback(float const crank_angle,
     (void)crank_angle;
     (void)timestamp;
 
+    if ((int)injector_us_until_open < 0)
+    {
+        /* XXX - TODO - Update a statistic? */
+        goto done;
+    }
+
     debug_latency = latency;
     debug_timer_base_count = timer_base_count;
     debug_injector_close_angle_atdc = injector_close_angle_atdc;
@@ -242,6 +248,9 @@ void injector_pulse_callback(float const crank_angle,
 #endif
     /* Called roughly 360 degrees before the injector is due to close. */
     injector_pulse_schedule(injector, timer_base_count, injector_us_until_open, injector_pulse_width_us);
+
+done:
+    return;
 }
 
 float get_ignition_advance(void)
@@ -321,7 +330,7 @@ static void setup_ignition_scheduling(trigger_wheel_36_1_context_st * const trig
     /* By doing the scheduling 1 revolution before the spark there should be enough time to get the start of the igntion pulse scheduled in. 
     */
     //for (index = 0; index < num_sparks; index++)
-    for (index = 0; index < 1; index++)
+    for (index = 0; index < 0; index++)
     {
         trigger_36_1_register_callback(trigger_context,
                                        normalise_engine_cycle_angle(ignition_scheduling_angle + (degrees_per_cylinder_ignition * index)),

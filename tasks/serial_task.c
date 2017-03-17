@@ -134,6 +134,11 @@ static void handleNewSerialData( void )
 
                         print_injector_debug();
                     }
+                    if (ch == 'p')
+                    {
+                        void print_pulser_debug(void);
+                        print_pulser_debug();
+                    }
                 }
 			}
 		}
@@ -151,17 +156,8 @@ void show_sysclock_info(uint32_t val)
     printf("pclk1 %"PRIu32"\r\n", clocks.PCLK1_Frequency);
 }
 
-static void doDebugOutput(uint32_t val)
+static void doPeriodicSerialTasks(void)
 {
-
-    //show_sysclock_info(val);
-    //print_pulse_details();
-
-}
-
-static void doPeriodicSerialTasks(uint32_t val)
-{
-	doDebugOutput(val);
 }
 
 static void cli_task(void * pv)
@@ -186,7 +182,7 @@ static void cli_task(void * pv)
 
         if ((readyFlags & (1 << cli_context.periodicTasksTimerFlag)))
         {
-            doPeriodicSerialTasks(SysTick->VAL);
+            doPeriodicSerialTasks();
         }
     }
 }
