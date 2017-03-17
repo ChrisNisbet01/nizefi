@@ -6,12 +6,9 @@
 
 struct pulsed_output_st
 {
-    gpio_config_st const * gpio_config;
+    pulse_output_init_st config;
     pulser_st * pulser;
 };
-
-static void output_active_callback(void * const arg);
-static void output_inactive_callback(void * const arg);
 
 #define NUM_PULSED_OUTPUTS 16 /* enough for number of injector outputs + number of ignition outputs. */
 
@@ -25,15 +22,11 @@ static void output_active_callback(void * const arg)
      * ISR.
      */
     pulsed_output_st * const pulsed_output = arg;
-    gpio_config_st const * const gpio_config = pulsed_output->gpio_config;
+    gpio_config_st const * const gpio_config = pulsed_output->config.gpio_config;
 
     GPIO_SetBits(gpio_config->port, gpio_config->pin);
-}
 
-static volatile float engine_cycle_angle;
-float get_angle_when_injector_closed(void)
-{
-    return engine_cycle_angle;
+    pulsed_output->config.active_cb(); 
 }
 
 static void output_inactive_callback(void * const arg)
@@ -41,16 +34,16 @@ static void output_inactive_callback(void * const arg)
     /* Called when the pulse goes inactive. Called from within an 
      * ISR.
      */
-    float current_engine_cycle_angle_get(void);
 
     pulsed_output_st * const pulsed_output = arg;
-    gpio_config_st const * const gpio_config = pulsed_output->gpio_config; 
+    gpio_config_st const * const gpio_config = pulsed_output->config.gpio_config; 
 
     GPIO_ResetBits(gpio_config->port, gpio_config->pin);
-    engine_cycle_angle = current_engine_cycle_angle_get();
+
+    pulsed_output->config.inactive_cb();
 }
 
-pulsed_output_st * pulsed_output_get(gpio_config_st const * const gpio_config)
+pulsed_output_st * pulsed_output_get(pulse_output_init_st * const init)
 {
     pulsed_output_st * pulsed_output;
 
@@ -62,7 +55,7 @@ pulsed_output_st * pulsed_output_get(gpio_config_st const * const gpio_config)
     pulsed_output = &pulsed_outputs[next_pulsed_output];
     next_pulsed_output++;
 
-    pulsed_output->gpio_config = gpio_config;
+    pulsed_output->config = *init;
 
     pulsed_output->pulser = pulser_get(output_active_callback,
                                        output_inactive_callback,

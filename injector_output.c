@@ -80,6 +80,23 @@ static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
 
 static size_t next_injector_output;
 
+static volatile float engine_cycle_angle;
+
+float get_angle_when_injector_closed(void)
+{
+    return engine_cycle_angle;
+}
+
+static void injector_active_cb(void)
+{
+}
+
+static void injector_inactive_cb(void)
+{
+    float current_engine_cycle_angle_get(void);
+    engine_cycle_angle = current_engine_cycle_angle_get();
+}
+
 static void initialise_injector_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pin, uint32_t const RCC_AHBPeriph)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
@@ -104,6 +121,7 @@ injector_output_st * injector_output_get(size_t const injector_number,
 {
     injector_output_st * injector_output;
     gpio_config_st const * gpio_config;
+    pulse_output_init_st pulsed_output_init;
 
     if (next_injector_output >= NUM_INJECTOR_GPIOS)
     {
@@ -119,8 +137,11 @@ injector_output_st * injector_output_get(size_t const injector_number,
      * capabilites (e.g. injector, ignition, relay, trigger input, 
      * ADC, whatever). 
      */
+    pulsed_output_init.gpio_config = gpio_config;
+    pulsed_output_init.active_cb = injector_active_cb;
+    pulsed_output_init.inactive_cb = injector_inactive_cb; 
 
-    injector_output->pulsed_output = pulsed_output_get(gpio_config);
+    injector_output->pulsed_output = pulsed_output_get(&pulsed_output_init);
     if (injector_output->pulsed_output == NULL)
     {
         injector_output = NULL;

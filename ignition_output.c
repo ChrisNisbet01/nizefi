@@ -73,6 +73,23 @@ static ignition_output_st ignition_outputs[NUM_IGNITION_GPIOS] =
 };
 static size_t next_ignition_output;
 
+static volatile float engine_cycle_angle;
+
+float get_angle_when_ignition_sparked(void)
+{
+    return engine_cycle_angle;
+}
+
+static void ignition_active_cb(void)
+{
+}
+
+static void ignition_inactive_cb(void)
+{
+    float current_engine_cycle_angle_get(void);
+    engine_cycle_angle = current_engine_cycle_angle_get();
+}
+
 static void initialise_ignition_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pin, uint32_t const RCC_AHBPeriph)
 {
     /* XXX - Currently exactly the same as the equivalent function 
@@ -100,6 +117,7 @@ ignition_output_st * ignition_output_get(void)
 {
     ignition_output_st * ignition_output;
     gpio_config_st const * gpio_config;
+    pulse_output_init_st pulsed_output_init; 
 
     if (next_ignition_output >= NUM_IGNITION_GPIOS)
     {
@@ -110,7 +128,11 @@ ignition_output_st * ignition_output_get(void)
     ignition_output = &ignition_outputs[next_ignition_output];
     gpio_config = ignition_output->gpio_config;
 
-    ignition_output->pulsed_output = pulsed_output_get(gpio_config);
+    pulsed_output_init.gpio_config = gpio_config;
+    pulsed_output_init.active_cb = ignition_active_cb;
+    pulsed_output_init.inactive_cb = ignition_inactive_cb; 
+
+    ignition_output->pulsed_output = pulsed_output_get(&pulsed_output_init);
     if (ignition_output->pulsed_output == NULL)
     {
         ignition_output = NULL;

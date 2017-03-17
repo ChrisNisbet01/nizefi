@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 
+/* TODO - Create a common GPIO config struct for all GPIO. */
 typedef struct gpio_config_st
 {
     uint32_t RCC_AHBPeriph;
@@ -12,9 +13,18 @@ typedef struct gpio_config_st
     uint_fast16_t pin;
 } gpio_config_st; 
 
+typedef void (* pulsed_output_notification_fn)(void);
+
+typedef struct pulse_output_init_st
+{
+    gpio_config_st const * gpio_config;
+    pulsed_output_notification_fn active_cb; /* Called when the output is set active in ISR. */
+    pulsed_output_notification_fn inactive_cb; /* Called when the output is set in active in ISR. */
+} pulse_output_init_st;
+
 typedef struct pulsed_output_st pulsed_output_st;
 
-pulsed_output_st * pulsed_output_get(gpio_config_st const * const gpio_config);
+pulsed_output_st * pulsed_output_get(pulse_output_init_st * const init);
 void pulsed_output_schedule(pulsed_output_st * const pulsed_output,
                             uint32_t base_count,
                             uint32_t const initial_delay_us,
