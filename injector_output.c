@@ -7,6 +7,8 @@
 struct injector_output_st
 {
     gpio_config_st const * const gpio_config;
+
+    float close_angle;
     pulsed_output_st * pulsed_output;
 };
 
@@ -96,7 +98,7 @@ static void initialise_injector_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pi
 /* XXX - Consider an operational mode where mutliple injectors 
  * should be fired at the same time (i.e. batch mode). 
  */
-injector_output_st * injector_output_get(void)
+injector_output_st * injector_output_get(float const injector_close_angle)
 {
     injector_output_st * injector_output;
     gpio_config_st const * gpio_config;
@@ -123,6 +125,8 @@ injector_output_st * injector_output_get(void)
         goto done;
     }
 
+    injector_output->close_angle = injector_close_angle;
+
     next_injector_output++;
 
     /* Initialise the GPIO. */
@@ -130,6 +134,11 @@ injector_output_st * injector_output_get(void)
 
 done:
     return injector_output;
+}
+
+float injector_close_angle_get(injector_output_st const * const injector_output)
+{
+    return injector_output->close_angle;
 }
 
 void injector_pulse_schedule(injector_output_st * const injector_output,

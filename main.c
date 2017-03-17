@@ -169,7 +169,7 @@ unsigned int get_engine_cycle_degrees(void)
     return 720;
 }
 
-float get_injector_close_angle(void)
+float get_config_injector_close_angle(void)
 {
     /* TODO: Calculate from configuration. */
 
@@ -213,7 +213,7 @@ void injector_pulse_callback(float const crank_angle,
 {
     injector_output_st * const injector = user_arg;
 #if 1
-    float const injector_close_angle_atdc = normalise_engine_cycle_angle(get_injector_close_angle()); /* Angle we want the injector closed. */
+    float const injector_close_angle_atdc = injector_close_angle_get(injector); /* Angle we want the injector closed. */
     float const injector_scheduling_angle = trigger_36_1_engine_cycle_angle_get(trigger_context); /* Current engine angle. */
     /* Determine how long it will take to rotate this many degrees. */
     float const time_to_next_injector_close = trigger_36_1_rotation_time_get(trigger_context,
@@ -272,11 +272,15 @@ void ignition_pulse_callback(float const crank_angle,
 
 static void get_injector_outputs(void)
 {
+    unsigned int const num_injectors = num_injectors_get();
+    unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
+    float const degrees_per_cylinder_injection = (float)degrees_per_engine_cycle / num_injectors;
+    float const injector_close_angle = get_config_injector_close_angle();
     size_t index;
 
     for (index = 0; index < num_injectors_get(); index++)
     {
-        injectors[index] = injector_output_get();
+        injectors[index] = injector_output_get(normalise_engine_cycle_angle(injector_close_angle + (degrees_per_cylinder_injection * index)));
     }
 }
 
@@ -295,21 +299,25 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     unsigned int const num_injectors = num_injectors_get();
     unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
     float const degrees_per_cylinder_injection = (float)degrees_per_engine_cycle / num_injectors;
-    float const injector_close_angle_btdc = get_injector_close_angle();
-    float const injector_scheduling_angle = injector_close_angle_btdc + 20.0; /* Temp debug add in some slack to help prevent event overlap. */
     size_t index;
 
     /* By using the angle at which the injector closes to schedule the next event there should be enough time to 
        get the start of the injector pulse scheduled in. 
        This is with the assumption that that the injector duty cycle never goes beyond something like 80-85%.
     */
-    //for (index = 0; index < num_injectors; index++)
-    for (index = 0; index < 1; index++)
+    for (index = 0; index < num_injectors; index++)
     {
+        injector_output_st * const injector = injectors[index];
+
+        float const injector_scheduling_angle = normalise_engine_cycle_angle(injector_close_angle_get(injector) + 20.0); 
+        /* Temp debug add in some slack to help prevent event overlap. 
+           Means that injector duty is limited to 100  * (720-20) / 720%. 
+         */
+
         trigger_36_1_register_callback(trigger_context,
-                                       normalise_engine_cycle_angle(injector_scheduling_angle + (degrees_per_cylinder_injection * index)),
+                                       normalise_engine_cycle_angle(injector_scheduling_angle),
                                        injector_pulse_callback,
-                                       injectors[index]);
+                                       injector);
     }
 }
 
@@ -329,8 +337,7 @@ static void setup_ignition_scheduling(trigger_wheel_36_1_context_st * const trig
 
     /* By doing the scheduling 1 revolution before the spark there should be enough time to get the start of the igntion pulse scheduled in. 
     */
-    //for (index = 0; index < num_sparks; index++)
-    for (index = 0; index < 0; index++)
+    for (index = 0; index < num_sparks; index++)
     {
         trigger_36_1_register_callback(trigger_context,
                                        normalise_engine_cycle_angle(ignition_scheduling_angle + (degrees_per_cylinder_ignition * index)),
