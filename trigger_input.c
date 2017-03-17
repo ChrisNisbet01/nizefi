@@ -3,6 +3,8 @@
 #include "queue.h"
 #include "hi_res_timer.h"
 #include "leds.h"
+#include "stm32f4_utils.h"
+
 #include <CoOS.h>
 #include <OsArch.h>
 
@@ -421,32 +423,6 @@ static void configure_gpio_pin(trigger_gpio_config_st const * const gpio_config)
     GPIO_Init(gpio_config->port, &GPIO_InitStruct);
 }
 
-/* TODO: This can be used for all interrupt enables. Put this 
- * into a separate module. 
- */
-static void configure_nested_vector_interrupt_controller(uint_fast8_t const NVIC_IRQChannel,
-                                                         uint_fast8_t const priority,
-                                                         uint_fast8_t const sub_priority)
-{
-    NVIC_InitTypeDef NVIC_InitStruct; 
-
-    /* Add IRQ vector to NVIC */
-    NVIC_InitStruct.NVIC_IRQChannel = NVIC_IRQChannel;
-    /* Set priority */
-    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = priority; /* Highest priority. 
-                                                                 XXX - Should this be higher or lower priority than the IRQ handling 
-                                                                 ignition and injector outputs?
-                                                               */
-    /* Set sub priority */
-    NVIC_InitStruct.NVIC_IRQChannelSubPriority = sub_priority;
-
-    /* Enable interrupt */
-    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
-
-    /* Add to NVIC */
-    NVIC_Init(&NVIC_InitStruct);
-}
-
 static void connect_pin_to_external_interrupt(uint32_t const EXTI_Line,
                                               EXTITrigger_TypeDef const EXTI_Trigger)
 {
@@ -476,8 +452,7 @@ static void configure_gpio_external_irq(trigger_gpio_config_st const * const gpi
     SYSCFG_EXTILineConfig(gpio_config->EXTI_PortSource, gpio_config->EXTI_PinSource);
 
     /* Make this interrupt the highest priority. */
-    /* XXX - Need to figure out the best interrupt priorities. */
-    configure_nested_vector_interrupt_controller(gpio_config->NVIC_IRQChannel, 0, 0);
+    stm32f4_enable_IRQ(gpio_config->NVIC_IRQChannel, 0, 0);
 
     connect_pin_to_external_interrupt(gpio_config->EXTI_Line,
                                       EXTI_Trigger_Falling); /* XXX - Configurable? */

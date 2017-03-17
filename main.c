@@ -290,7 +290,8 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     float const injector_scheduling_angle = injector_close_angle_btdc + 20.0; /* Temp debug add in some slack to help prevent event overlap. */
     size_t index;
 
-    /* By using the angle at which the injector closes there should be enough time to get the start of the injector pulse scheduled in. 
+    /* By using the angle at which the injector closes to schedule the next event there should be enough time to 
+       get the start of the injector pulse scheduled in. 
        This is with the assumption that that the injector duty cycle never goes beyond something like 80-85%.
     */
     //for (index = 0; index < num_injectors; index++)
@@ -310,16 +311,16 @@ float get_ignition_spark_angle_btdc(void)
 }
 static void setup_ignition_scheduling(trigger_wheel_36_1_context_st * const trigger_context)
 {
-    unsigned int const num_injectors = num_ignition_outputs_get();
+    unsigned int const num_sparks = num_ignition_outputs_get();
     unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
-    float const degrees_per_cylinder_ignition = (float)degrees_per_engine_cycle / num_injectors;
+    float const degrees_per_cylinder_ignition = (float)degrees_per_engine_cycle / num_sparks;
     float const spark_angle_btdc = get_ignition_spark_angle_btdc();
     float const ignition_scheduling_angle = normalise_engine_cycle_angle(720.0 - 360.0 - spark_angle_btdc);
     size_t index;
 
     /* By doing the scheduling 1 revolution before the spark there should be enough time to get the start of the igntion pulse scheduled in. 
     */
-    //for (index = 0; index < num_injectors; index++)
+    //for (index = 0; index < num_sparks; index++)
     for (index = 0; index < 1; index++)
     {
         trigger_36_1_register_callback(trigger_context,
@@ -356,11 +357,7 @@ int main(void)
      * engine cycle. 
      */
     setup_injector_scheduling(trigger_context);
-
-    trigger_36_1_register_callback(trigger_context, 360.0, ignition_pulse_callback, ignitions[0]);
-    trigger_36_1_register_callback(trigger_context, 540.0, ignition_pulse_callback, ignitions[1]);
-    trigger_36_1_register_callback(trigger_context, 0.0, ignition_pulse_callback, ignitions[2]);
-    trigger_36_1_register_callback(trigger_context, 180.0, ignition_pulse_callback, ignitions[3]);
+    setup_ignition_scheduling(trigger_context);
 
     init_trigger_signals(trigger_context); /* Done after CoInitOS() as it uses CoOS resources. */
 

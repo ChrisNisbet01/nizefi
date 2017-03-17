@@ -8,6 +8,7 @@
 #include <serial.h>
 #include "hi_res_timer.h"
 #include "pulser.h"
+#include "utils.h"
 
 #include <stm32f4xx_gpio.h>
 
@@ -25,9 +26,6 @@ static const serial_port_t serial_ports[] =
 {
     SERIAL_UART_1,
 };
-
-#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
-#define UNUSED(x) ((void)(x))
 
 static serialCli_st serialCli[ARRAY_SIZE(serial_ports)];
 

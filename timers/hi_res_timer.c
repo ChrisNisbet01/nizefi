@@ -1,15 +1,13 @@
 #include "hi_res_timer.h"
 
+#include "stm32f4_utils.h"
+#include "utils.h"
+
 #include <stdlib.h>
 #include <stdbool.h>
 
 #include <stm32f4xx_tim.h>
 #include <stm32f4xx_rcc.h>
-
-#define HIRESTIM TIM2
-#define HIRESTIM_IRQn TIM2_IRQn
-#define HIRESTTIM_CLK RCC_APB1Periph_TIM2
-#define HIRESTIM_IRQHandler TIM2_IRQHandler
 
 typedef enum channel_index_t
 {
@@ -26,8 +24,8 @@ typedef struct channel_config_st {
 /* XXX - Big cleanup required. config doesn't need to contain 
  * the timer as only one is used. 
  * Only certain pins can be used for input capture. It turns out 
- * that PA5 (crank trigger input is attached to CC1 on TIM2, but 
- * the CAM trigger input can not be attached to TIM2 CC at all. 
+ * that PA5 (crank trigger input is attached to IC1 on TIM2, but
+ * the CAM trigger input can not be attached to TIM2 IC at all. 
  */
 typedef struct input_capture_config_st
 {
@@ -65,13 +63,13 @@ static const input_capture_config_st input_capture_configs[] =
         .RCC_AHBPeriph = RCC_AHB1Periph_GPIOA,
 
         /* Timer related */
-        .tim = HIRESTIM,
-        .irq = HIRESTIM_IRQn,
+        .tim = TIM2,
+        .irq = TIM2_IRQn,
         .channel_config = &channel_configs[CH1_IDX]
     }
 };
 
-#define NUM_TRIGGER_INPUT_CONFIGS	(sizeof(input_capture_configs)/sizeof(input_capture_configs[0]))
+#define NUM_TRIGGER_INPUT_CONFIGS ARRAY_SIZE(input_capture_configs)
 #define TRIGGER_INPUT_CONFIG_INDEX(p)	((p)-channel_configs)
 
 static input_capture_context_st input_capture_contexts[1];
@@ -102,76 +100,27 @@ static void configure_input_trigger_gpio_pin(uint32_t const RCC_AHBPeriph,
     GPIO_Init(port, &GPIO_InitStruct);
 }
 
-
-static void initTimerTimeBase(TIM_TypeDef * tim, uint_fast16_t period, uint_fast32_t frequency_hz)
+static void handle_input_capture(channel_config_st const * const channel_config, input_capture_context_st * const input_capture_context)
 {
-    TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
-
-    TIM_TimeBaseStructInit(&TIM_TimeBaseStructure);
-
-    RCC_ClocksTypeDef clocks;
-    uint32_t multiplier;
-    RCC_GetClocksFreq(&clocks);
-
-    if (clocks.PCLK1_Frequency == clocks.SYSCLK_Frequency)
-    {
-        multiplier = 1;
-    }
-    else
-    {
-        multiplier = 2;
-    }
-    uint32_t CLK_Frequency =  multiplier * clocks.PCLK1_Frequency;
-
-    RCC_GetClocksFreq(&clocks);
-
-    TIM_TimeBaseStructure.TIM_Prescaler = (CLK_Frequency / frequency_hz) - 1;
-
-    TIM_TimeBaseStructure.TIM_Period = period;
-    TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;
-    TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
-
-    TIM_TimeBaseInit(tim, &TIM_TimeBaseStructure);
-}
-
-static void initTimerNVIC(uint_fast8_t irq)
-{
-    NVIC_InitTypeDef NVIC_InitStructure;
-
-    NVIC_InitStructure.NVIC_IRQChannel = irq;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-
-    NVIC_Init(&NVIC_InitStructure);
-}
-
-static void handle_input_capture(channel_config_st const * const channel_config)
-{
-    size_t const channel_index = TRIGGER_INPUT_CONFIG_INDEX(channel_config);
-    input_capture_context_st * const input_capture_context = &input_capture_contexts[channel_index];
-
-    TIM_ClearITPendingBit(HIRESTIM, channel_config->interruptBit);
-
     if (input_capture_context->callback != NULL)
     {
-        uint32_t const timestamp = channel_config->TIM_GetCaptureFn(HIRESTIM); 
+        uint32_t const timestamp = channel_config->TIM_GetCaptureFn(TIM2);
         input_capture_context->callback(timestamp);
     }
 }
 
-void HIRESTIM_IRQHandler(void)
+void TIM2_IRQHandler(void)
 {
-    if (TIM_GetITStatus(HIRESTIM, TIM_IT_CC1))
+    if (TIM_GetITStatus(TIM2, TIM_IT_CC1))
     {
-        TIM_ClearITPendingBit(HIRESTIM, TIM_IT_CC1);
-        handle_input_capture(&channel_configs[CH1_IDX]);
+        TIM_ClearITPendingBit(TIM2, TIM_IT_CC1);
+        handle_input_capture(&channel_configs[CH1_IDX], &input_capture_contexts[CH1_IDX]);
     }
 }
 
 uint32_t hi_res_counter_val(void)
 {
-    return HIRESTIM->CNT;
+    return TIM_GetCounter(TIM2);
 }
 
 #define CRANK_INPUT_CAPTURE_INDEX 0
@@ -181,11 +130,12 @@ static void initInputCapture(TIM_TypeDef * tim, uint_fast8_t channel, uint_fast1
     TIM_ICInitTypeDef TIM_ICInitStructure;
 
     TIM_ICStructInit(&TIM_ICInitStructure);
+
     TIM_ICInitStructure.TIM_Channel = channel;
     TIM_ICInitStructure.TIM_ICPolarity = polarity;
-    TIM_ICInitStructure.TIM_ICSelection = TIM_ICSelection_DirectTI;
-    TIM_ICInitStructure.TIM_ICPrescaler = TIM_ICPSC_DIV1;
-    TIM_ICInitStructure.TIM_ICFilter = 0x0;
+
+    /* TODO: What (if any) input filtering is required? */
+    TIM_ICInitStructure.TIM_ICFilter = 0x00;
 
     TIM_ICInit(tim, &TIM_ICInitStructure);
 }
@@ -214,6 +164,8 @@ static void register_input_trigger_callback(size_t input_capture_index,
 
     /* Enable the interrupts. */
     TIM_ITConfig(input_capture_config->tim, input_capture_config->channel_config->interruptBit, ENABLE);
+
+    stm32f4_enable_IRQ(input_capture_config->irq, 0, 0);
 }
 
 void register_crank_trigger_callback(void (* callback)(uint32_t const timestamp_us))
@@ -223,15 +175,20 @@ void register_crank_trigger_callback(void (* callback)(uint32_t const timestamp_
 
 void initHiResTimer(uint32_t const frequency)
 {
-    /* enable timer clock */
-    RCC_APB1PeriphClockCmd(HIRESTTIM_CLK, ENABLE);
+    /* Enable peripheral clock for the timer. */
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
 
-    initTimerTimeBase(HIRESTIM, 0xffffffff, frequency);
-
-    initTimerNVIC(HIRESTIM_IRQn);
+    /* Set the timer up as as a 32bit counter ticking over at the 
+     * desired frquency. 
+     */
+    stm32f4_timer_configure(TIM2, 0xffffffff, frequency, false);
 
     /* start the timer */
-    TIM_Cmd(HIRESTIM, ENABLE);
+    TIM_Cmd(TIM2, ENABLE);
+
+    /* No interrupts required at this stage, so don't do the NVIC 
+     * setup. 
+     */
 }
 
 

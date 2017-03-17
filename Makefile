@@ -120,6 +120,7 @@ LDFLAGS = $(CPU_FLAGS) \
 
 # now specify source files
 COMMON_SRC = \
+	$(SRC_DIR)/stm32f4_utils.c \
 	$(SRC_DIR)/utils.c \
 	$(SRC_DIR)/stdio/printf.c \
 	$(SRC_DIR)/main.c \
@@ -142,10 +143,10 @@ COOS_SRC = $(COOS_DIR)/kernel/*.c \
 COOS_SRC_NO_LTO = $(wildcard $(COOS_DIR)/portable/GCC/*.c)
 
 
-SRC_FILES = $(COMMON_SRC) \
-            $(TARGET_SRC) \
+SRC_FILES = $(TARGET_SRC) \
             $(STM32_SRC) \
-            $(COOS_SRC)
+            $(COOS_SRC) \
+			$(COMMON_SRC) \
 
 SRC_FILES_NO_LTO = $(COOS_SRC_NO_LTO) \
 				$(SRC_DIR)/syscalls/*.c

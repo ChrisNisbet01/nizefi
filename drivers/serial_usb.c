@@ -1,3 +1,4 @@
+#include "utils.h"
 #include <stdlib.h>
 #include <stdint.h>
 
@@ -61,7 +62,7 @@ static const usb_config_t usb_serial_ports[] =
 	}
 };
 
-#define NB_USB_PORTS	(sizeof(usb_serial_ports)/sizeof(usb_serial_ports[0]))
+#define NB_USB_PORTS ARRAY_SIZE(usb_serial_ports)
 #define USB_IDX(ptr)	((ptr)-usb_serial_ports)
 
 static usb_serial_ctx_st usb_serial_ctxs[NB_USB_PORTS];

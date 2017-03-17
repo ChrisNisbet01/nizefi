@@ -1,5 +1,7 @@
 #include "timed_events.h"
 #include "queue.h"
+#include "utils.h"
+#include "stm32f4_utils.h"
 
 #include <stm32f4xx_tim.h>
 #include <stdbool.h>
@@ -208,64 +210,19 @@ static timer_st const timers[] =
         .use_PCLK2 = true
     }
 };
-#define NUM_TIMERS (sizeof timers / sizeof timers[0])
+#define NUM_TIMERS ARRAY_SIZE(timers)
 
 static timer_context_st timer_context;
 
-static void initTimerTimeBase(TIM_TypeDef * tim, uint_fast32_t period, uint_fast32_t frequency_hz, bool const use_PCLK2)
-{
-    TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
-    uint32_t CLK_Frequency;
-
-    TIM_TimeBaseStructInit(&TIM_TimeBaseStructure);
-
-    RCC_ClocksTypeDef clocks;
-    uint32_t multiplier;
-
-    RCC_GetClocksFreq(&clocks);
-
-    if (use_PCLK2)
-    {
-        multiplier = 2;
-        CLK_Frequency =  multiplier * clocks.PCLK2_Frequency;
-    }
-    else
-    {
-        if (clocks.PCLK1_Frequency == clocks.SYSCLK_Frequency)
-        {
-            multiplier = 1;
-        }
-        else
-        {
-            multiplier = 2;
-        }
-        CLK_Frequency =  multiplier * clocks.PCLK1_Frequency;
-    }
-
-    TIM_TimeBaseStructure.TIM_Prescaler = (CLK_Frequency / frequency_hz) - 1;
-
-    TIM_TimeBaseStructure.TIM_Period = period;
-    TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;
-    TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
-
-    TIM_TimeBaseInit(tim, &TIM_TimeBaseStructure);
-}
-
 static void timer_init(timer_st const * const timer, uint32_t frequency)
 {
-    NVIC_InitTypeDef NVIC_InitStructure;
-
     /* TIMx clock enable */
     timer->RCC_APBPeriphClockCmd(timer->RCC_APBPeriph, ENABLE);
 
-    initTimerTimeBase(timer->TIM, 0xffffffff, frequency, timer->use_PCLK2);
+    stm32f4_timer_configure(timer->TIM, 0xffffffff, frequency, timer->use_PCLK2);
 
     /* Enable timer interrupt */
-    NVIC_InitStructure.NVIC_IRQChannel = timer->IRQ_channel;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStructure);
+    stm32f4_enable_IRQ(timer->IRQ_channel, 2, 0);
 
     /* Enable the timer. */
     TIM_Cmd(timer->TIM, ENABLE);
@@ -317,6 +274,7 @@ timer_channel_context_st * timer_channel_get(void (* const cb)(void * const arg)
     }
 
     LIST_REMOVE(channel, entry);
+
     channel->in_use = true;
     channel->handler = cb;
     channel->arg = arg;
@@ -331,6 +289,7 @@ void timer_channel_free(timer_channel_context_st * const channel)
     /* TODO: ensure the channel is in the inuse list. */
 
     LIST_REMOVE(channel, entry);
+
     channel->in_use = false;
     LIST_INSERT_HEAD(&timer_context.unused_timer_list, channel, entry);
 }

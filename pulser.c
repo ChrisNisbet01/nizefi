@@ -16,7 +16,8 @@ typedef void (* state_handler)(pulser_st * context);
 
 struct pulser_st
 {
-    OS_FlagID flag; /* Used to signal the pulser task to run from the ISR. */
+    OS_FlagID event_completion_flag; /* Used to signal the pulser task to run from the ISR. */
+    uint32_t event_completion_bit;
 
     /* ISR level and task level state machine handlers. */
     state_handler isr_state_handler;
@@ -72,7 +73,7 @@ static void indicate_timeout(pulser_st * context)
 {
     CoEnterISR();
 
-    isr_SetFlag(context->flag);
+    isr_SetFlag(context->event_completion_flag);
 
     CoExitISR();
 }
@@ -176,7 +177,7 @@ static void pulser_timer_callback(void * const arg)
     indicate_timeout(context);
 }
 
-void schedule_pulse(pulser_st * const context, uint32_t const base_time, uint32_t const initial_delay_us, uint_fast16_t const pulse_us)
+void pulser_schedule_pulse(pulser_st * const context, uint32_t const base_time, uint32_t const initial_delay_us, uint_fast16_t const pulse_us)
 {
     if (context->timer_context != NULL)
     {
@@ -209,14 +210,6 @@ void schedule_pulse(pulser_st * const context, uint32_t const base_time, uint32_
     }
 }
 
-void pulse_start(pulser_st * const context,
-                 uint32_t base_count,
-                 uint32_t initial_delay_us, 
-                 uint_fast16_t pulse_us)
-{
-    schedule_pulse(context, base_count, initial_delay_us, pulse_us);
-}
-
 pulser_st * pulser_get(pulser_callback const active_callback,
                     pulser_callback const inactive_callback,
                     void * const user_arg)
@@ -236,7 +229,7 @@ pulser_st * pulser_get(pulser_callback const active_callback,
     pulser->user_arg = user_arg;
 
     pulser_state.next_pulser++;
-    pulser_state.active_pulser_flags |= 1 << pulser->flag;
+    pulser_state.active_pulser_flags |= pulser->event_completion_bit;
 
 done:
     return pulser;
@@ -258,7 +251,7 @@ static void pulser_task(void * pdata)
         {
             pulser_st * const context = &pulser_state.pulser_contexts[index];
 
-            if ((readyFlags & (1 << context->flag)))
+            if ((readyFlags & context->event_completion_bit) != 0)
             {
                 context->task_state_handler(context); 
             }
@@ -276,7 +269,8 @@ void init_pulsers(void)
     {
         pulser_st * const context = &pulser_state.pulser_contexts[index];
 
-        context->flag = CoCreateFlag(Co_TRUE, Co_FALSE);
+        context->event_completion_flag = CoCreateFlag(Co_TRUE, Co_FALSE);
+        context->event_completion_bit = 1 << context->event_completion_flag;
 
         context->timer_context = timer_channel_get(pulser_timer_callback, context);
     }

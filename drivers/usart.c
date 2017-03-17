@@ -1,3 +1,6 @@
+#include "stm32f4_utils.h"
+#include "utils.h"
+
 #include <stdlib.h>
 #include <stdint.h>
 
@@ -47,7 +50,7 @@ typedef struct usart_port_config_st
 	uint_fast32_t		RCC_APBPeriph;
 	uint_fast16_t		irq;
 
-}usart_port_config_st;
+} usart_port_config_st;
 
 static const usart_port_config_st usart_configs[] =
 {
@@ -69,7 +72,7 @@ static const usart_port_config_st usart_configs[] =
         .irq = USART1_IRQn
     }
 };
-#define NB_UART_PORTS	(sizeof(usart_configs)/sizeof(usart_configs[0]))
+#define NB_UART_PORTS ARRAY_SIZE(usart_configs)
 #define GET_USART_IDX(ptr)	((ptr)-usart_configs)
 
 static usart_cb_st usartCallbackInfo[NB_UART_PORTS];
@@ -133,13 +136,10 @@ void const * stm32_usart_init(usart_init_st *cfg)
         GPIO_Init(uart_config->gpioPort, &GPIO_InitStructure);
     }
 
-    NVIC_InitTypeDef NVIC_InitStructure;
-
-    NVIC_InitStructure.NVIC_IRQChannel = uart_config->irq;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 4;	// TODO: configurable
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 2;			// TODO: configurable
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStructure);
+    /* Make this IRQ lower priority than the ones used for engine 
+     * control related tasks. 
+     */
+    stm32f4_enable_IRQ(uart_config->irq, 4, 2);
 
 done:
     return uart_config;
@@ -149,10 +149,15 @@ static void usartIrqHandler(usart_port_config_st const * const uart_config, usar
 {
     if (USART_GetITStatus(uart_config->usart, USART_IT_RXNE) != RESET)
     {
+        uint8_t const rx_char = uart_config->usart->DR;
+
+        /* Reading the DR register also clears USART_IT_RXNE in the 
+         * interrupt status register. 
+         */
         /* Receive data ready. */
     	if (runtime->putRxChar != NULL)
     	{
-    		runtime->putRxChar( runtime->pv, uart_config->usart->DR );
+            runtime->putRxChar(runtime->pv, rx_char);
     	}
     }
 
@@ -165,11 +170,14 @@ static void usartIrqHandler(usart_port_config_st const * const uart_config, usar
          */
         if (runtime->getTxChar != NULL)
         {
-            int ch = runtime->getTxChar(runtime->pv);
+            int const ch = runtime->getTxChar(runtime->pv);
 
             if (ch >= 0)
             {
                 USART_SendData(uart_config->usart, ch);
+                /* THis will also clear USART_IT_TXE in the 
+                 * interrupt status register.
+                 */
                 disable_transmit = 0;
             }
         }

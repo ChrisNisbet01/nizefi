@@ -1,5 +1,6 @@
 #include "ignition_output.h"
 #include "pulsed_output.h"
+#include "utils.h"
 
 #include <stddef.h>
 
@@ -44,7 +45,7 @@ static gpio_config_st const ignition_gpios[] =
         .pin = GPIO_Pin_12
     }
 };
-#define NUM_IGNITION_GPIOS (sizeof ignition_gpios / sizeof ignition_gpios[0])
+#define NUM_IGNITION_GPIOS ARRAY_SIZE(ignition_gpios)
 
 /* Temp debug just use a couple of LED pins. Injectors will use 
  * the other couple. 

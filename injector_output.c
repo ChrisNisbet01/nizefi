@@ -1,5 +1,6 @@
 #include "injector_output.h"
 #include "pulsed_output.h"
+#include "utils.h"
 
 #include <stddef.h>
 
@@ -47,7 +48,7 @@ static gpio_config_st const injector_gpios[] =
         .pin = GPIO_Pin_15
     }
 };
-#define NUM_INJECTOR_GPIOS (sizeof injector_gpios / sizeof injector_gpios[0])
+#define NUM_INJECTOR_GPIOS ARRAY_SIZE(injector_gpios)
 
 /* XXX - Must match the number of injector GPIO in the table 
  * above. 

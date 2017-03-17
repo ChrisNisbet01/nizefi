@@ -1,3 +1,4 @@
+#include "utils.h"
 #include <stdlib.h>
 #include <stdint.h>
 
@@ -85,7 +86,7 @@ static const uart_ports_config_t uart_ports[] =
     }
 };
 
-#define NB_UART_PORTS	(sizeof(uart_ports)/sizeof(uart_ports[0]))
+#define NB_UART_PORTS ARRAY_SIZE(uart_ports)
 #define UART_IDX(ptr)	((ptr)-uart_ports)
 
 static uart_ctx_st uart_ctxs[NB_UART_PORTS];
