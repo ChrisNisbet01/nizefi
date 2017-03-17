@@ -30,15 +30,24 @@ static void output_active_callback(void * const arg)
     GPIO_SetBits(gpio_config->port, gpio_config->pin);
 }
 
+static volatile float engine_cycle_angle;
+float get_angle_when_injector_closed(void)
+{
+    return engine_cycle_angle;
+}
+
 static void output_inactive_callback(void * const arg)
 {
     /* Called when the pulse goes inactive. Called from within an 
      * ISR.
      */
+    float current_engine_cycle_angle_get(void);
+
     pulsed_output_st * const pulsed_output = arg;
     gpio_config_st const * const gpio_config = pulsed_output->gpio_config; 
 
     GPIO_ResetBits(gpio_config->port, gpio_config->pin);
+    engine_cycle_angle = current_engine_cycle_angle_get();
 }
 
 pulsed_output_st * pulsed_output_get(gpio_config_st const * const gpio_config)
