@@ -103,11 +103,6 @@ static void handleNewSerialData( void )
                 if (ch >= 0)
                 {
                     //uartPutChar(serialCli[uart_index].cli_uart, ch);
-                    if (ch == 'r')
-                    {
-                        reset_pulse_details();
-                    }
-                    print_pulse_details();
                     if (ch == ' ')
                     {
                         float rpm_get(void);
@@ -116,10 +111,6 @@ static void handleNewSerialData( void )
 
                         //printf("rpm: %f\r\n", rpm);
                         printf("rpm_32: %"PRIu32"\r\n", rpm_32);
-                    }
-                    if (ch == 'm')
-                    {
-                        printf("min length %d\r\n", min_queue_length_get());
                     }
                     if (ch == 'c')
                     {

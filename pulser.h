@@ -18,8 +18,5 @@ void pulser_schedule_pulse(pulser_st * const context,
 void init_pulsers(void);
 uint32_t pulser_timer_count_get(pulser_st const * const pulser);
 
-void print_pulse_details(void);
-void reset_pulse_details(void);
-
 
 #endif /* __PULSER_H__ */

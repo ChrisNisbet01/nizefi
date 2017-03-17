@@ -1,0 +1,19 @@
+when calculating time to rotate an angle we do this
+
+
+v2 ^ 2 = v1 ^ 2 + 2 * a * s
+
+where 
+v2: final velocity
+v1: initial velocity
+a: acceleration
+s: distance
+
+final velocity v2 is therefore sqrt((v1 ^ 2) + (2 * a * s))
+
+if we want to work out time to travel a distance we can take
+(v2 - v1) / 2 to get average velocity v(avg)
+ 
+then t = d / v(avg)
+
+obviously, if v(avg) is zero, this doesn't work.

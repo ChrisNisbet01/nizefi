@@ -8,9 +8,21 @@
 #include <inttypes.h>
 
 #define STACK_SIZE_PULSER 1024
-#define NUM_PULSERS 16 /* Must be >= number of injectors + number of ignition outputs. */
+#define NUM_PULSERS 16 /* Must be >= number of injectors + number of ignition outputs && <= number of timer channels. */
 
-//#define PULSE_DEBUG
+/* If any scheduled timer specifies a time great then this the 
+ * delay is performed in stages to avoid timer overflow 
+ * issues. 
+ */
+#define MAX_TIMER_TICKS_BEFORE_STAGING 40000UL
+/* If staging to avoid overflow, this is the amount of time to 
+ * use between stages. This value should be less than 
+ * MAX_TIMER_TICKS_BEFORE_STAGING so that if a timer time is 
+ * only slightly greater than MAX_TIMER_TICKS_BEFORE_STAGING 
+ * there will still be a reasonable time left to schedule the 
+ * next event. 
+ */
+#define TIMER_STAGE_TICKS 30000UL
 
 typedef void (* state_handler)(pulser_st * context);
 
@@ -40,13 +52,6 @@ struct pulser_st
     uint_fast16_t active_us; /* The period of time the pulse should be active for. */
     uint_fast16_t initial_delay_left_us;
 
-#if defined(PULSE_DEBUG)
-    /* Some debug information. */
-    uint32_t systick_at_start;
-    uint32_t systick_at_gpio_off;
-    uint32_t systick_at_start_task;
-    uint32_t systick_at_gpio_off_task; 
-#endif
 };
 
 static void pulser_initial_delay_isr_handler(pulser_st * context);
@@ -96,10 +101,10 @@ static void pulser_initial_delay_overflow_isr_handler(pulser_st * context)
 static void pulser_initial_delay_overflow_task_handler(pulser_st * context)
 {
     (void)context;
-    if (context->initial_delay_left_us > 40000)
+    if (context->initial_delay_left_us > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
-        context->initial_delay_left_us -= 30000;
-        timer_channel_schedule_followup_event(context->timer_context, 30000); 
+        context->initial_delay_left_us -= TIMER_STAGE_TICKS;
+        timer_channel_schedule_followup_event(context->timer_context, TIMER_STAGE_TICKS);
     }
     else
     {
@@ -115,22 +120,10 @@ static void pulser_initial_delay_isr_handler(pulser_st * context)
 {
     /* The initial delay is over. */
     context->active_callback(context->user_arg);
-#if defined(PULSE_DEBUG)
-    if (context->systick_at_start == 0)
-    {
-        context->systick_at_start = SysTick->VAL;
-    }
-#endif
 }
 
 static void pulser_initial_delay_task_handler(pulser_st * context)
 {
-#if defined(PULSE_DEBUG)
-    if (context->systick_at_start_task == 0)
-    {
-        context->systick_at_start_task = SysTick->VAL; 
-    }
-#endif
     /* TODO: Add support for pulses longer than 65536 by adding a 
      * new state that schedules follow up events, but leaves the 
      * pulser active. Add similar support for longer initial delays.
@@ -145,22 +138,10 @@ static void pulser_active_isr_handler(pulser_st * context)
 {
     /* The pulse time is over. */
     context->inactive_callback(context->user_arg);
-#if defined(PULSE_DEBUG)
-    if (context->systick_at_gpio_off == 0)
-    {
-        context->systick_at_gpio_off = SysTick->VAL;
-    }
-#endif
 }
 
 static void pulser_active_task_handler(pulser_st * context)
 {
-#if defined(PULSE_DEBUG)
-    if (context->systick_at_gpio_off_task == 0)
-    {
-        context->systick_at_gpio_off_task = SysTick->VAL;
-    }
-#endif
     context->isr_state_handler = pulser_idle_isr_handler;
     context->task_state_handler = pulser_idle_task_handler;
     timer_channel_disable(context->timer_context);
@@ -184,10 +165,10 @@ void pulser_schedule_pulse(pulser_st * const context, uint32_t const base_time, 
         uint32_t initial_delay = initial_delay_us;
         context->active_us = pulse_us; /* Remember the pulse width. */
 
-        if (initial_delay_us > 40000)
+        if (initial_delay_us > MAX_TIMER_TICKS_BEFORE_STAGING)
         {
-            initial_delay = 30000;
-            context->initial_delay_left_us = initial_delay_us - 30000;
+            initial_delay = TIMER_STAGE_TICKS;
+            context->initial_delay_left_us = initial_delay_us - TIMER_STAGE_TICKS;
             context->isr_state_handler = pulser_initial_delay_overflow_isr_handler;
             context->task_state_handler = pulser_initial_delay_overflow_task_handler;
         }
@@ -197,14 +178,6 @@ void pulser_schedule_pulse(pulser_st * const context, uint32_t const base_time, 
             context->isr_state_handler = pulser_initial_delay_isr_handler;
             context->task_state_handler = pulser_initial_delay_task_handler; 
         }
-
-
-#if defined(PULSE_DEBUG)
-        context->systick_at_start = 0;
-        context->systick_at_gpio_off = 0;
-        context->systick_at_start_task = 0;
-        context->systick_at_gpio_off_task = 0;
-#endif
 
         timer_channel_schedule_new_based_event(context->timer_context, base_time, initial_delay);
     }
@@ -281,45 +254,4 @@ uint32_t pulser_timer_count_get(pulser_st const * const pulser)
     return timer_channel_get_current_time(pulser->timer_context);
 }
 
-void print_pulse_details(void)
-{
-#if defined(PULSE_DEBUG)
-    size_t index;
-
-    for (index = 0; index < NUM_PULSERS; index++)
-    {
-        pulser_st * const context = &pulser_state.pulser_contexts[index];
-
-        if (context->systick_at_start > 0)
-        {
-            printf("%u start: %"PRIu32" task: %"PRIu32" end: %"PRIu32" end: %"PRIu32" diff %"PRIu32"\r\n",
-                   index, 
-                   context->systick_at_start, 
-                   context->systick_at_start_task,
-                   context->systick_at_gpio_off,
-                   context->systick_at_gpio_off_task,
-                   context->systick_at_start - context->systick_at_gpio_off);
-            printf(" start diff: %"PRIu32" end diff: %"PRIu32"\r\n",
-                   context->systick_at_start - context->systick_at_start_task,
-                   context->systick_at_gpio_off - context->systick_at_gpio_off_task);
-        }
-    }
-#endif
-}
-
-void reset_pulse_details(void)
-{
-#if defined(PULSE_DEBUG)
-    size_t index;
-
-    printf("reset\r\n");
-    for (index = 0; index < NUM_PULSERS; index++)
-    {
-        pulser_st * const context = &pulser_state.pulser_contexts[index];
-
-        context->systick_at_start = 0;
-        context->systick_at_gpio_off = 0;
-    }
-#endif
-}
 

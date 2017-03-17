@@ -318,16 +318,6 @@ static void init_trigger_signal_lists(void)
     init_cam_trigger_signal_list();
 }
 
-int min_queue_length_get(void)
-{
-    int const length = 100;
-
-    /* TODO - Reinstate some statistics. It appears that the queue 
-     * length goes to 0 at times (due to printf?). 
-     */
-    return length;
-}
-
 float rpm_get(void)
 {
     return trigger_36_1_rpm_get(trigger_context);
