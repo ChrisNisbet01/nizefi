@@ -211,7 +211,7 @@ $(OBJ_DIR)/%.o: %.S
 
 
 clean:
-	rm -rf $(OBJS)
+	rm -rf $(OBJ_DIR)
 	rm -rf $(TARGET_ELF)
 	rm -rf $(TARGET_HEX)
 
