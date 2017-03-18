@@ -81,12 +81,12 @@ static void init_button(void)
     GPIO_InitTypeDef GPIO_InitStruct;
     EXTI_InitTypeDef EXTI_InitStruct;
     NVIC_InitTypeDef NVIC_InitStruct;
-    
+
     /* Enable clock for GPIOA */
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
     /* Enable clock for SYSCFG */
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
-    
+
     /* Set pin as input */
     GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IN;
     GPIO_InitStruct.GPIO_OType = GPIO_OType_PP;
@@ -94,10 +94,10 @@ static void init_button(void)
     GPIO_InitStruct.GPIO_PuPd = GPIO_PuPd_NOPULL;
     GPIO_InitStruct.GPIO_Speed = GPIO_Speed_2MHz;
     GPIO_Init(GPIOA, &GPIO_InitStruct);
-    
+
     /* Tell system that you will use PA0 for EXTI_Line0 */
     SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOA, EXTI_PinSource0);
-    
+
     /* PA0 is connected to EXTI_Line0 */
     EXTI_InitStruct.EXTI_Line = EXTI_Line0;
     /* Enable interrupt */
@@ -108,7 +108,7 @@ static void init_button(void)
     EXTI_InitStruct.EXTI_Trigger = EXTI_Trigger_Rising_Falling;
     /* Add to EXTI */
     EXTI_Init(&EXTI_InitStruct);
- 
+
     /* Add IRQ vector to NVIC */
     /* PA5 is connected to EXTI_Line5-9, which has EXTI1_IRQn vector */
     NVIC_InitStruct.NVIC_IRQChannel = EXTI9_5_IRQn;
@@ -175,7 +175,7 @@ float get_config_injector_close_angle(void)
 
     return -50.0;
 }
- 
+
 uint32_t get_injector_pulse_width_us(void)
 {
     /* TODO - Calculate pulse width. */
@@ -198,6 +198,7 @@ float debug_time_to_next_injector_close;
 uint32_t debug_latency;
 uint32_t debug_timer_base_count;
 int debug_injector_number;
+float debug_ignition_scheduling_angle;
 
 void print_injector_debug(void)
 {
@@ -211,6 +212,7 @@ void print_injector_debug(void)
            debug_time_to_next_injector_close);
     printf("latency %"PRIu32" base %"PRIu32"\r\n\r\n", debug_latency, debug_timer_base_count);
     printf("\r\nactual close %f actual spark %f\r\n", get_angle_when_injector_closed(), get_angle_when_ignition_sparked());
+    printf("igntion_scheduling_angle %f actual spark %f\r\n", debug_ignition_scheduling_angle, get_angle_when_ignition_sparked());
 }
 
 float current_engine_cycle_angle_get(void)
@@ -223,6 +225,10 @@ void injector_pulse_callback(float const crank_angle,
                              void * const user_arg)
 {
     injector_output_st * const injector = user_arg;
+
+    UNUSED(crank_angle);
+    UNUSED(timestamp);
+
 #if 1
     float const injector_close_angle = injector_close_angle_get(injector); /* Angle we want the injector closed. */
     float const injector_scheduling_angle = trigger_36_1_engine_cycle_angle_get(trigger_context); /* Current engine angle. */
@@ -231,14 +237,10 @@ void injector_pulse_callback(float const crank_angle,
                                                                              (float)get_engine_cycle_degrees() - normalise_engine_cycle_angle(injector_scheduling_angle - injector_close_angle));
     /* The injector pulse width must include the time taken to open the injector (dead time). */
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us() + get_injector_dead_time_us();
-    uint32_t const injector_us_until_open = lrintf(time_to_next_injector_close * TIMER_FREQUENCY)
-                                                    - injector_pulse_width_us;
+    uint32_t const injector_us_until_open = lrintf(time_to_next_injector_close * TIMER_FREQUENCY) - injector_pulse_width_us;
     uint32_t const latency = hi_res_counter_val() - timestamp;
     uint32_t const injector_timer_count = injector_timer_count_get(injector);
     uint32_t const timer_base_count = (injector_timer_count - latency) & 0xffff; /* This is the time from which we base the injector event. */
-
-    (void)crank_angle;
-    (void)timestamp;
 
     if ((int)injector_us_until_open < 0)
     {
@@ -255,8 +257,9 @@ void injector_pulse_callback(float const crank_angle,
     debug_injector_pulse_width_us = injector_pulse_width_us;
     debug_injector_number = injector_number_get(injector);
 #else
+    uint32_t const timer_base_count = injector_timer_count_get(injector); /* This is the time from which we base the injector event. */
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();
-    uint32_t const injector_us_until_open = 100; 
+    uint32_t const injector_us_until_open = 100;
 
 #endif
     /* Called roughly 360 degrees before the injector is due to close. */
@@ -272,15 +275,58 @@ float get_ignition_advance(void)
     return 10.0; /* NB - value is in degrees BTDC. */
 }
 
+uint32_t get_ignition_dwell_us(void)
+{
+    return 20000;
+}
+
 void ignition_pulse_callback(float const crank_angle,
                              uint32_t timestamp,
                              void * const user_arg)
 {
     ignition_output_st * const ignition = user_arg;
-    (void)crank_angle;
-    (void)timestamp; 
 
-    ignition_pulse_schedule(ignition, ignition_timer_count_get(ignition), 100, 2000);
+    UNUSED(crank_angle);
+    UNUSED(timestamp);
+
+#if 1
+    unsigned int const num_ignitions = num_ignition_outputs_get();
+    unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
+    float const degrees_per_cylinder_ignition = (float)degrees_per_engine_cycle / num_ignitions; 
+    float ignition_spark_angle = normalise_engine_cycle_angle((degrees_per_cylinder_ignition * ignition_number_get(ignition)) - get_ignition_advance());
+    float const ignition_scheduling_angle = trigger_36_1_engine_cycle_angle_get(trigger_context); /* Current engine angle. */
+    /* Determine how long it will take to rotate this many degrees. */
+    float const time_to_next_spark = trigger_36_1_rotation_time_get(trigger_context,
+                                                                    (float)get_engine_cycle_degrees() - normalise_engine_cycle_angle(ignition_scheduling_angle - ignition_spark_angle));
+    /* The injector pulse width must include the time taken to open the injector (dead time). */
+    uint32_t const ignition_pulse_width_us = get_ignition_dwell_us();
+    uint32_t const ignition_us_until_open = lrintf(time_to_next_spark * TIMER_FREQUENCY) - ignition_pulse_width_us;
+    uint32_t const latency = hi_res_counter_val() - timestamp;
+    uint32_t const ignition_timer_count = ignition_timer_count_get(ignition);
+    uint32_t const timer_base_count = (ignition_timer_count - latency) & 0xffff; /* This is the time from which we base the injector event. */
+
+    debug_ignition_scheduling_angle = ignition_scheduling_angle;
+
+    if ((int)ignition_us_until_open < 0)
+    {
+        /* XXX - TODO - Update a statistic? */
+        goto done;
+    }
+
+#else
+    (void)crank_angle;
+    (void)timestamp;
+    uint32_t const ignition_pulse_width_us = 2000;
+    uint32_t const ignition_us_until_open = 100;
+    uint32_t const injector_timer_count = injector_timer_count_get(injector);
+    uint32_t const timer_base_count = injector_timer_count; /* This is the time from which we base the injector event. */
+
+#endif
+
+    ignition_pulse_schedule(ignition, timer_base_count, ignition_us_until_open, ignition_pulse_width_us);
+
+done:
+    return;
 }
 
 static void get_injector_outputs(void)
@@ -300,13 +346,28 @@ static void get_injector_outputs(void)
 
 static void get_ignition_outputs(void)
 {
+#if 1
+    unsigned int const num_ignitions = num_ignition_outputs_get();
+    unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
+    float const degrees_per_cylinder_ignitionn = (float)degrees_per_engine_cycle / num_ignitions;
+    float const ignition_spark_angle = get_ignition_advance();
     size_t index;
-    float const ignition_spark_angle = get_ignition_advance(); 
+
+    /* TODO: Ingition advance obviously varies. This is all just debug. */
+    for (index = 0; index < num_ignitions; index++)
+    {
+        ignitions[index] = ignition_output_get(index,
+                                               normalise_engine_cycle_angle(ignition_spark_angle + (degrees_per_cylinder_ignitionn * index)));
+    }
+#else
+    size_t index;
+    float const ignition_spark_angle = get_ignition_advance();
 
     for (index = 0; index < num_ignition_outputs_get(); index++)
     {
         ignitions[index] = ignition_output_get(index, ignition_spark_angle);
     }
+#endif
 }
 
 static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trigger_context)
@@ -323,7 +384,7 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
         injector_output_st * const injector = injectors[index];
         float const injector_close_to_schedule_delay = 0.0;
 
-        float const injector_scheduling_angle = normalise_engine_cycle_angle(injector_close_angle_get(injector) 
+        float const injector_scheduling_angle = normalise_engine_cycle_angle(injector_close_angle_get(injector)
                                                                              + injector_close_to_schedule_delay);
         /* Temp debug add in some slack to help prevent event overlap. 
            Means that injector duty is limited to 100  * (720-20) / 720%. 
@@ -336,9 +397,9 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     }
 }
 
-float get_ignition_spark_angle_btdc(void)
+float get_ignition_maximum_advance(void)
 {
-    return 10.0;
+    return 50.0; /* Debug. */
 
 }
 static void setup_ignition_scheduling(trigger_wheel_36_1_context_st * const trigger_context)
@@ -346,8 +407,9 @@ static void setup_ignition_scheduling(trigger_wheel_36_1_context_st * const trig
     unsigned int const num_ignitions = num_ignition_outputs_get();
     unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
     float const degrees_per_cylinder_ignition = (float)degrees_per_engine_cycle / num_ignitions;
-    float const spark_angle_btdc = get_ignition_spark_angle_btdc();
-    float const ignition_scheduling_angle = normalise_engine_cycle_angle(720.0 - 360.0 - spark_angle_btdc);
+    float const maximum_advance = get_ignition_maximum_advance();
+    float const tolerance = 10.0;
+    float const ignition_scheduling_angle = normalise_engine_cycle_angle((float)degrees_per_engine_cycle - (360.0 + maximum_advance + tolerance));
     size_t index;
 
     /* By doing the scheduling 1 revolution before the spark there should be enough time to get the start 
