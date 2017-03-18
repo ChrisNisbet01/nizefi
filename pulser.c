@@ -30,7 +30,7 @@
  */
 #define TIMER_STAGE_TICKS 30000UL
 
-typedef void (* state_handler)(pulser_st * context);
+typedef void (* state_handler)(pulser_st * pulser);
 
 struct pulser_st
 {
@@ -68,146 +68,178 @@ struct pulser_st
     volatile int_fast16_t event_overlap; /* Overlap between end of current event and base time of the next. */
 };
 
-static void pulser_initial_delay_isr_handler(pulser_st * context);
-static void pulser_initial_delay_task_handler(pulser_st * context);
+static void pulser_initial_delay_isr_handler(pulser_st * pulser);
+static void pulser_initial_delay_task_handler(pulser_st * pulser);
 
-static void pulser_initial_delay_overflow_isr_handler(pulser_st * context);
-static void pulser_initial_delay_overflow_task_handler(pulser_st * context); 
+static void pulser_initial_delay_overflow_isr_handler(pulser_st * pulser);
+static void pulser_initial_delay_overflow_task_handler(pulser_st * pulser); 
 
-static void pulser_active_isr_handler(pulser_st * context);
-static void pulser_active_task_handler(pulser_st * context);
+static void pulser_active_isr_handler(pulser_st * pulser);
+static void pulser_active_task_handler(pulser_st * pulser);
 
 typedef struct pulser_state_st
 {
     __attribute((aligned(8))) OS_STK pulser_stk[STACK_SIZE_PULSER];
 
-    pulser_st pulser_contexts[NUM_PULSERS];
+    pulser_st pulsers[NUM_PULSERS];
     size_t next_pulser;
     uint32_t active_pulser_flags;
 } pulser_state_st;
 
 static pulser_state_st pulser_state;
 
-static void indicate_timeout(pulser_st * context)
+static void indicate_timeout(pulser_st * pulser)
 {
     CoEnterISR();
 
-    isr_SetFlag(context->event_completion_flag);
+    isr_SetFlag(pulser->event_completion_flag);
 
     CoExitISR();
 }
 
-static void pulser_idle_isr_handler(pulser_st * context)
+static void pulser_idle_isr_handler(pulser_st * pulser)
 {
-    (void)context;
+    (void)pulser;
 }
 
-static void pulser_idle_task_handler(pulser_st * context)
+static void pulser_idle_task_handler(pulser_st * pulser)
 {
-    (void)context;
+    (void)pulser;
 }
 
-static void pulser_initial_delay_overflow_isr_handler(pulser_st * context)
+static void pulser_initial_delay_overflow_isr_handler(pulser_st * pulser)
 {
-    (void)context;
+    (void)pulser;
 }
 
-static void pulser_initial_delay_overflow_task_handler(pulser_st * context)
+static void pulser_set_state_idle(pulser_st * pulser)
 {
-    (void)context;
+    pulser->isr_state_handler = pulser_idle_isr_handler;
+    pulser->task_state_handler = pulser_idle_task_handler;
 
-    if (context->initial_delay_left_us > MAX_TIMER_TICKS_BEFORE_STAGING)
+    /* Schedule the next pulse if one is waiting */
+    if (pulser->pending_event)
     {
-        context->initial_delay_left_us -= TIMER_STAGE_TICKS;
-        context->timer_end_us += TIMER_STAGE_TICKS;
+        pulser->pending_event = false;
+        pulser_schedule_pulse(pulser,
+                              pulser->pending_base_time,
+                              pulser->pending_initial_delay_us,
+                              pulser->pending_pulse_us);
+    }
+}
 
-        timer_channel_schedule_followup_event(context->timer_context, TIMER_STAGE_TICKS);
+static void pulser_set_state_initial_delay(pulser_st * pulser)
+{
+    pulser->isr_state_handler =  pulser_initial_delay_isr_handler;
+    pulser->task_state_handler = pulser_initial_delay_task_handler;
+}
+
+static void pulser_set_state_active(pulser_st * pulser)
+{
+    pulser->isr_state_handler =  pulser_active_isr_handler;
+    pulser->task_state_handler = pulser_active_task_handler;
+}
+
+static void pulser_set_state_initial_delay_overflow(pulser_st * pulser)
+{
+    pulser->isr_state_handler = pulser_initial_delay_overflow_isr_handler;
+    pulser->task_state_handler = pulser_initial_delay_overflow_task_handler;
+}
+
+static void pulser_initial_delay_overflow_task_handler(pulser_st * pulser)
+{
+    (void)pulser;
+
+    if (pulser->initial_delay_left_us > MAX_TIMER_TICKS_BEFORE_STAGING)
+    {
+        pulser->initial_delay_left_us -= TIMER_STAGE_TICKS;
+        pulser->timer_end_us += TIMER_STAGE_TICKS;
+
+        timer_channel_schedule_followup_event(pulser->timer_context, TIMER_STAGE_TICKS);
     }
     else
     {
-        context->isr_state_handler =  pulser_initial_delay_isr_handler;
-        context->task_state_handler = pulser_initial_delay_task_handler;
-        context->timer_end_us += context->initial_delay_left_us;
+        pulser_set_state_initial_delay(pulser);
 
-        timer_channel_schedule_followup_event(context->timer_context, context->initial_delay_left_us);
-        context->initial_delay_left_us = 0;
+        pulser->timer_end_us += pulser->initial_delay_left_us;
+
+        timer_channel_schedule_followup_event(pulser->timer_context, pulser->initial_delay_left_us);
+        pulser->initial_delay_left_us = 0;
     }
 }
 
-static void pulser_initial_delay_isr_handler(pulser_st * context)
+static void pulser_initial_delay_isr_handler(pulser_st * pulser)
 {
     /* The initial delay is over. */
-    context->active_callback(context->user_arg);
+    pulser->active_callback(pulser->user_arg);
 }
 
-static void pulser_initial_delay_task_handler(pulser_st * context)
+static void pulser_initial_delay_task_handler(pulser_st * pulser)
 {
     /* TODO: Add support for pulses longer than 65536 by adding a 
      * new state that schedules follow up events, but leaves the 
-     * pulser active. Add similar support for longer initial delays.
+     * pulser active.
      */
-    context->isr_state_handler =  pulser_active_isr_handler; 
-    context->task_state_handler = pulser_active_task_handler;
+    pulser_set_state_active(pulser);
 
-    context->timer_end_us += context->active_us;
+    pulser->timer_end_us += pulser->active_us;
 
-    timer_channel_schedule_followup_event(context->timer_context, context->active_us);
+    timer_channel_schedule_followup_event(pulser->timer_context, pulser->active_us);
 }
 
-static void pulser_active_isr_handler(pulser_st * context)
+static void pulser_active_isr_handler(pulser_st * pulser)
 {
     /* The pulse time is over. */
-    context->inactive_callback(context->user_arg);
+    pulser->inactive_callback(pulser->user_arg);
 }
 
-static void pulser_active_task_handler(pulser_st * context)
+static void pulser_active_task_handler(pulser_st * pulser)
 {
-    context->isr_state_handler = pulser_idle_isr_handler;
-    context->task_state_handler = pulser_idle_task_handler;
+    timer_channel_disable(pulser->timer_context);
 
-    timer_channel_disable(context->timer_context);
-
-    /* Schedule the next pulse if one is waiting */
-    if (context->pending_event)
-    {
-        context->pending_event = false;
-        pulser_schedule_pulse(context, 
-                              context->pending_base_time, 
-                              context->pending_initial_delay_us,
-                              context->pending_pulse_us);
-    }
+    pulser_set_state_idle(pulser);
 }
 
 static void pulser_timer_callback(void * const arg)
 {
-    pulser_st * const context = arg;
+    pulser_st * const pulser = arg;
 
-    context->isr_state_handler(context);
+    pulser->isr_state_handler(pulser);
     /* We signal the pulser task no matter the current state.
      * To avoid repitition we put the call to signal the pulser task after the state handler. 
      */
-    indicate_timeout(context);
+    indicate_timeout(pulser);
 }
 
-void pulser_schedule_pulse(pulser_st * const context, uint32_t const base_time, uint32_t const initial_delay_us, uint_fast16_t const pulse_us)
+void pulser_schedule_pulse(pulser_st * const pulser, 
+                           uint32_t const base_time, 
+                           uint32_t const initial_delay_us, 
+                           uint_fast16_t const pulse_us)
 {
     uint32_t initial_delay = initial_delay_us;
-    context->active_us = pulse_us; /* Remember the pulse width. */
+    pulser->active_us = pulse_us; /* Remember the pulse width. */
 
-    if (context->task_state_handler == pulser_active_task_handler)
+    /* XXX Need to deal with race conditions here. */
+    if (pulser->task_state_handler != pulser_idle_task_handler)
     {
         /* The pulser context hasn't finished with the previous 
          * event. 
          */
-        context->pending_base_time = base_time;
-        context->pending_initial_delay_us = initial_delay_us;
-        context->pending_pulse_us = pulse_us;
-        context->event_overlap = (int16_t)(context->timer_end_us - context->pending_base_time);
+        pulser->pending_base_time = base_time;
+        pulser->pending_initial_delay_us = initial_delay_us;
+        pulser->pending_pulse_us = pulse_us;
+        pulser->event_overlap = (int16_t)(pulser->timer_end_us - pulser->pending_base_time);
 
-        context->pending_base_time += context->event_overlap;
-        context->pending_initial_delay_us -= context->event_overlap;
+        /* TODO: Still need to think about what to do when there is 
+         * overlap between one event and the next wrt what to do with 
+         * the timer base value. I'm not convinced I'm adjusting it 
+         * correctly here. Does it need adjusting at all?
+         */
 
-        context->pending_event = true; 
+        pulser->pending_base_time += pulser->event_overlap;
+        pulser->pending_initial_delay_us -= pulser->event_overlap;
+
+        pulser->pending_event = true; 
 
         goto done;
     }
@@ -218,26 +250,25 @@ void pulser_schedule_pulse(pulser_st * const context, uint32_t const base_time, 
          * FIXME - XXX - Find out why this happens. Appears to be -ve 
          * initial delay i.e. 0 - injector pulse width. 
          */
+        led_toggle(RED_LED);
         goto done;
     }
 
     if (initial_delay_us > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
         initial_delay = TIMER_STAGE_TICKS;
-        context->initial_delay_left_us = initial_delay_us - TIMER_STAGE_TICKS;
-        context->isr_state_handler = pulser_initial_delay_overflow_isr_handler;
-        context->task_state_handler = pulser_initial_delay_overflow_task_handler;
+        pulser->initial_delay_left_us = initial_delay_us - TIMER_STAGE_TICKS;
+        pulser_set_state_initial_delay_overflow(pulser);
     }
     else
     {
-        context->initial_delay_left_us = 0;
-        context->isr_state_handler = pulser_initial_delay_isr_handler;
-        context->task_state_handler = pulser_initial_delay_task_handler; 
+        pulser->initial_delay_left_us = 0;
+        pulser_set_state_initial_delay(pulser);
     }
 
-    context->timer_end_us = base_time + initial_delay;
+    pulser->timer_end_us = base_time + initial_delay;
 
-    timer_channel_schedule_new_based_event(context->timer_context, base_time, initial_delay);
+    timer_channel_schedule_new_based_event(pulser->timer_context, base_time, initial_delay);
 
 done:
     return;
@@ -255,7 +286,7 @@ pulser_st * pulser_get(pulser_callback const active_callback,
         goto done;
     }
 
-    pulser = &pulser_state.pulser_contexts[pulser_state.next_pulser];
+    pulser = &pulser_state.pulsers[pulser_state.next_pulser];
 
     pulser->active_callback = active_callback;
     pulser->inactive_callback = inactive_callback;
@@ -282,11 +313,11 @@ static void pulser_task(void * pdata)
 
         for (index = 0; index < pulser_state.next_pulser; index++)
         {
-            pulser_st * const context = &pulser_state.pulser_contexts[index];
+            pulser_st * const pulser = &pulser_state.pulsers[index];
 
-            if ((readyFlags & context->event_completion_bit) != 0)
+            if ((readyFlags & pulser->event_completion_bit) != 0)
             {
-                context->task_state_handler(context); 
+                pulser->task_state_handler(pulser); 
             }
         }
     }
@@ -300,19 +331,19 @@ void init_pulsers(void)
 
     for (index = 0; index < NUM_PULSERS; index++)
     {
-        pulser_st * const context = &pulser_state.pulser_contexts[index];
+        pulser_st * const pulser = &pulser_state.pulsers[index];
 
-        context->event_completion_flag = CoCreateFlag(Co_TRUE, Co_FALSE);
-        context->event_completion_bit = 1 << context->event_completion_flag;
+        pulser->event_completion_flag = CoCreateFlag(Co_TRUE, Co_FALSE);
+        pulser->event_completion_bit = 1 << pulser->event_completion_flag;
+        pulser->pending_event = false;
 
-        context->timer_context = timer_channel_get(pulser_timer_callback, context);
+        pulser->timer_context = timer_channel_get(pulser_timer_callback, pulser);
 
-        /* If context->timer_context == NULL this is a big problem. 
+        /* If pulser->timer_context == NULL this is a big problem. 
          * Should log some kind of event and halt the firmware. 
          */
 
-        context->isr_state_handler = pulser_idle_isr_handler;
-        context->task_state_handler = pulser_idle_task_handler;
+        pulser_set_state_idle(pulser);
     }
 }
 
@@ -324,6 +355,6 @@ uint32_t pulser_timer_count_get(pulser_st const * const pulser)
 void print_pulser_debug(void)
 {
     printf("eo: %d id: %"PRIu32"\r\n", 
-           (int)pulser_state.pulser_contexts[0].event_overlap,
-           (uint32_t)pulser_state.pulser_contexts[0].initial_delay_left_us);
+           (int)pulser_state.pulsers[0].event_overlap,
+           (uint32_t)pulser_state.pulsers[0].initial_delay_left_us);
 }

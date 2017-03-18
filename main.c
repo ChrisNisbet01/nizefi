@@ -353,8 +353,7 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
        get the start of the injector pulse scheduled in. 
        This is with the assumption that that the injector duty cycle never goes beyond something like 80-85%.
     */
-    for (index = 0; index < 1; index++)
-    //for (index = 0; index < num_injectors; index++)
+    for (index = 0; index < num_injectors; index++)
     {
         injector_output_st * const injector = injectors[index];
         float const injector_close_to_schedule_delay = 0.0;
