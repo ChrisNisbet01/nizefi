@@ -165,11 +165,11 @@ void ignition_pulse_schedule(ignition_output_st * const ignition_output,
                              uint32_t const initial_delay_us,
                              uint16_t const pulse_us)
 {
-    pulser_schedule_st pulser_schedule =
+    pulser_schedule_st const pulser_schedule =
     {
         .base_time = base_count,
         .initial_delay_us = initial_delay_us,
-        .pulse_us = pulse_us
+        .pulse_width_us = pulse_us
     };
 
     pulser_schedule_pulse(ignition_output->pulser, &pulser_schedule);

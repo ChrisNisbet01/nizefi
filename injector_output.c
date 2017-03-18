@@ -179,11 +179,11 @@ void injector_pulse_schedule(injector_output_st * const injector_output,
                              uint32_t initial_delay_us,
                              uint16_t pulse_us)
 {
-    pulser_schedule_st pulser_schedule =
+    pulser_schedule_st const pulser_schedule =
     {
         .base_time = base_count,
         .initial_delay_us = initial_delay_us,
-        .pulse_us = pulse_us
+        .pulse_width_us = pulse_us
     };
 
     pulser_schedule_pulse(injector_output->pulser, &pulser_schedule);

@@ -55,7 +55,7 @@ struct pulser_st
      * May need to update the initial delay on the new request to 
      * account for the delay in starting the timer. 
      */
-    uint_fast16_t active_us; /* The period of time the pulse should be active for. */
+    uint_fast16_t pulse_width_us; /* The period of time the pulse should be active for. */
 
     uint_fast16_t timer_end_us; /* time when the current event will occur. */
 
@@ -177,9 +177,9 @@ static void pulser_initial_delay_task_handler(pulser_st * pulser)
      */
     pulser_set_state_active(pulser);
 
-    pulser->timer_end_us += pulser->active_us;
+    pulser->timer_end_us += pulser->pulse_width_us;
 
-    timer_channel_schedule_followup_event(pulser->timer_context, pulser->active_us);
+    timer_channel_schedule_followup_event(pulser->timer_context, pulser->pulse_width_us);
 }
 
 static void pulser_active_isr_handler(pulser_st * pulser)
@@ -209,8 +209,7 @@ static void pulser_timer_callback(void * const arg)
 void pulser_schedule_pulse(pulser_st * const pulser, 
                            pulser_schedule_st const * const pulser_schedule)
 {
-    uint32_t initial_delay = pulser_schedule->initial_delay_us;
-    pulser->active_us = pulser_schedule->pulse_us; /* Remember the pulse width. */
+    uint32_t initial_delay;
 
     /* XXX Need to deal with race conditions here. */
     if (pulser->task_state_handler != pulser_idle_task_handler)
@@ -224,17 +223,16 @@ void pulser_schedule_pulse(pulser_st * const pulser,
         goto done;
     }
 
-    if (initial_delay > MAXIMUM_TIMER_LENGTH_SECS * TIMER_FREQUENCY)
+    if (pulser_schedule->initial_delay_us > MAXIMUM_TIMER_LENGTH_SECS * TIMER_FREQUENCY)
     {
         /* Shouldn't happen, but does once when first getting going. 
          * FIXME - XXX - Find out why this happens. Appears to be -ve 
          * initial delay i.e. 0 - injector pulse width. 
          */
-        led_toggle(RED_LED);
         goto done;
     }
 
-    if (initial_delay > MAX_TIMER_TICKS_BEFORE_STAGING)
+    if (pulser_schedule->initial_delay_us > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
         initial_delay = TIMER_STAGE_TICKS;
         pulser->initial_delay_left_us = initial_delay - TIMER_STAGE_TICKS;
@@ -242,10 +240,12 @@ void pulser_schedule_pulse(pulser_st * const pulser,
     }
     else
     {
+        initial_delay = pulser_schedule->initial_delay_us;
         pulser->initial_delay_left_us = 0;
         pulser_set_state_initial_delay(pulser);
     }
 
+    pulser->pulse_width_us = pulser_schedule->pulse_width_us; /* Remember the pulse width. */
     pulser->timer_end_us = pulser_schedule->base_time + initial_delay;
 
     timer_channel_schedule_new_based_event(pulser->timer_context, pulser_schedule->base_time, initial_delay);
