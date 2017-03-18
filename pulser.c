@@ -234,8 +234,8 @@ void pulser_schedule_pulse(pulser_st * const pulser,
 
     if (pulser_schedule->initial_delay_us > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
+        pulser->initial_delay_left_us = pulser_schedule->initial_delay_us - TIMER_STAGE_TICKS;
         initial_delay = TIMER_STAGE_TICKS;
-        pulser->initial_delay_left_us = initial_delay - TIMER_STAGE_TICKS;
         pulser_set_state_initial_delay_overflow(pulser);
     }
     else
