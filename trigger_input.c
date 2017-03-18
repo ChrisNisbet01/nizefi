@@ -378,11 +378,6 @@ void trigger_input_task(void * pdata)
         switch (trigger_source)
         {
             case trigger_signal_source_crank:
-                if (delta <= 0)
-                {
-                    GPIO_ToggleBits(GPIOD, BLUE_LED);
-                    printf("%"PRIu32" %"PRIu32" %"PRIu32"\r\n", timestamp, last_timestamp, last_last_timestamp);
-                }
                 last_last_timestamp = last_timestamp;
                 last_timestamp = timestamp;
                 crank_trigger_signal_put(trigger_signal);

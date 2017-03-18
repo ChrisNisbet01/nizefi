@@ -120,6 +120,7 @@ LDFLAGS = $(CPU_FLAGS) \
 
 # now specify source files
 COMMON_SRC = \
+	$(SRC_DIR)/leds.c \
 	$(SRC_DIR)/stm32f4_utils.c \
 	$(SRC_DIR)/utils.c \
 	$(SRC_DIR)/stdio/printf.c \

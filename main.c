@@ -53,7 +53,6 @@
 /* Private typedef -----------------------------------------------------------*/
 
 /*---------------------------- Variable Define -------------------------------*/
-GPIO_InitTypeDef GPIO_InitStructure;
 
 /* TODO: Create an engine context structure to hold all runtime information.
  */
@@ -137,32 +136,6 @@ static void init_button(void)
 */
 #endif
 
-static void init_leds(void)
-{
-    /* GPIOD Periph clock enable */
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
-
-    /* Configure PD13, PD14 and PD15 in output push-pull mode */
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14  | GPIO_Pin_15;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-    GPIO_Init(GPIOD, &GPIO_InitStructure);
-
-#if 0 /* Used if tying GPIO pins to timers. */
-    GPIO_PinAFConfig(GPIOD, GPIO_PinSource12, GPIO_AF_TIM4);
-
-    /* Configure PD12 to be connected to TIM4 */
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-    GPIO_Init(GPIOD, &GPIO_InitStructure);
-#endif
-}
-
 unsigned int get_engine_cycle_degrees(void)
 {
     /* TODO: Calculate from configuration (two stroke/four stroke). */
@@ -244,6 +217,7 @@ void injector_pulse_callback(float const crank_angle,
 
     if ((int)injector_us_until_open < 0)
     {
+        /* This seems to occur once at startup time. */
         /* XXX - TODO - Update a statistic? */
         goto done;
     }
@@ -379,7 +353,8 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
        get the start of the injector pulse scheduled in. 
        This is with the assumption that that the injector duty cycle never goes beyond something like 80-85%.
     */
-    for (index = 0; index < num_injectors; index++)
+    for (index = 0; index < 1; index++)
+    //for (index = 0; index < num_injectors; index++)
     {
         injector_output_st * const injector = injectors[index];
         float const injector_close_to_schedule_delay = 0.0;
