@@ -134,6 +134,12 @@ static void handleNewSerialData( void )
 
                         print_injector_debug();
                     }
+                    if (ch == 'g')
+                    {
+                        void print_ignition_debug(void);
+
+                        print_ignition_debug();
+                    }
                     if (ch == 'p')
                     {
                         void print_pulser_debug(void);

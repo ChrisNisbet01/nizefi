@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define INJECTOR_MAX 8
+#define MAX_INJECTORS 8
 
 typedef struct injector_output_st injector_output_st;
 

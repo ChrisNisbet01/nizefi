@@ -358,28 +358,22 @@ trigger_signal_st * pend_on_trigger_message(void)
 
 void trigger_input_task(void * pdata)
 {
-    uint32_t last_timestamp = 0;
-    uint32_t last_last_timestamp = 0;
     (void)pdata;
 
     while (1)
     {
         trigger_signal_st * trigger_signal;
         uint32_t timestamp;
-        int32_t delta;
         trigger_signal_source_t trigger_source;
 
         trigger_signal = pend_on_trigger_message();
 
         timestamp = trigger_signal->timestamp;
-        delta = timestamp - last_timestamp; 
         trigger_source = trigger_signal->source;
 
         switch (trigger_source)
         {
             case trigger_signal_source_crank:
-                last_last_timestamp = last_timestamp;
-                last_timestamp = timestamp;
                 crank_trigger_signal_put(trigger_signal);
                 trigger_36_1_handle_crank_pulse(trigger_context, timestamp);
                 break;
