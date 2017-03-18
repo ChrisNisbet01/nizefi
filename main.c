@@ -210,7 +210,7 @@ void print_injector_debug(void)
            debug_injector_scheduling_angle,
            debug_time_to_next_injector_close);
     printf("latency %"PRIu32" base %"PRIu32"\r\n\r\n", debug_latency, debug_timer_base_count);
-    printf("\r\nactual close %f\r\n", get_angle_when_injector_closed());
+    printf("\r\nactual close %f actual spark %f\r\n", get_angle_when_injector_closed(), get_angle_when_ignition_sparked());
 }
 
 float current_engine_cycle_angle_get(void)
@@ -301,10 +301,11 @@ static void get_injector_outputs(void)
 static void get_ignition_outputs(void)
 {
     size_t index;
+    float const ignition_spark_angle = get_ignition_advance(); 
 
     for (index = 0; index < num_ignition_outputs_get(); index++)
     {
-        ignitions[index] = ignition_output_get();
+        ignitions[index] = ignition_output_get(index, ignition_spark_angle);
     }
 }
 
@@ -342,17 +343,17 @@ float get_ignition_spark_angle_btdc(void)
 }
 static void setup_ignition_scheduling(trigger_wheel_36_1_context_st * const trigger_context)
 {
-    unsigned int const num_sparks = num_ignition_outputs_get();
+    unsigned int const num_ignitions = num_ignition_outputs_get();
     unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
-    float const degrees_per_cylinder_ignition = (float)degrees_per_engine_cycle / num_sparks;
+    float const degrees_per_cylinder_ignition = (float)degrees_per_engine_cycle / num_ignitions;
     float const spark_angle_btdc = get_ignition_spark_angle_btdc();
     float const ignition_scheduling_angle = normalise_engine_cycle_angle(720.0 - 360.0 - spark_angle_btdc);
     size_t index;
 
-    /* By doing the scheduling 1 revolution before the spark there should be enough time to get the start of the igntion pulse scheduled in. 
-    */
-    //for (index = 0; index < num_sparks; index++)
-    for (index = 0; index < 0; index++)
+    /* By doing the scheduling 1 revolution before the spark there should be enough time to get the start 
+     * of the ignition pulse scheduled in at all realistic RPMs. 
+     */
+    for (index = 0; index < num_ignitions; index++)
     {
         trigger_36_1_register_callback(trigger_context,
                                        normalise_engine_cycle_angle(ignition_scheduling_angle + (degrees_per_cylinder_ignition * index)),

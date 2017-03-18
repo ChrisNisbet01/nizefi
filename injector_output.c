@@ -1,8 +1,17 @@
 #include "injector_output.h"
-#include "pulsed_output.h"
+#include "pulser.h"
 #include "utils.h"
+#include "stm32f4xx_gpio.h"
 
 #include <stddef.h>
+
+/* TODO - Create a common GPIO config struct for all GPIO. */
+typedef struct gpio_config_st
+{
+    uint32_t RCC_AHBPeriph;
+    GPIO_TypeDef * port;
+    uint_fast16_t pin;
+} gpio_config_st;
 
 struct injector_output_st
 {
@@ -10,7 +19,7 @@ struct injector_output_st
 
     float close_angle;
     size_t number; /* Which injector is this. NOT the same as the cylinder number. */
-    pulsed_output_st * pulsed_output;
+    pulser_st * pulser;
 };
 
 typedef enum injector_index_t
@@ -87,13 +96,22 @@ float get_angle_when_injector_closed(void)
     return engine_cycle_angle;
 }
 
-static void injector_active_cb(void)
+static void injector_active_cb(void * const arg)
 {
+    injector_output_st * const injector_output = arg;
+    gpio_config_st const * const gpio_config = injector_output->gpio_config;
+
+    GPIO_SetBits(gpio_config->port, gpio_config->pin);
 }
 
-static void injector_inactive_cb(void)
+static void injector_inactive_cb(void * const arg)
 {
-    float current_engine_cycle_angle_get(void);
+    injector_output_st * const injector_output = arg;
+    gpio_config_st const * const gpio_config = injector_output->gpio_config; 
+    float current_engine_cycle_angle_get(void); 
+
+    GPIO_ResetBits(gpio_config->port, gpio_config->pin);
+
     engine_cycle_angle = current_engine_cycle_angle_get();
 }
 
@@ -121,7 +139,6 @@ injector_output_st * injector_output_get(size_t const injector_number,
 {
     injector_output_st * injector_output;
     gpio_config_st const * gpio_config;
-    pulse_output_init_st pulsed_output_init;
 
     if (next_injector_output >= NUM_INJECTOR_GPIOS)
     {
@@ -137,17 +154,12 @@ injector_output_st * injector_output_get(size_t const injector_number,
      * capabilites (e.g. injector, ignition, relay, trigger input, 
      * ADC, whatever). 
      */
-    pulsed_output_init.gpio_config = gpio_config;
-    pulsed_output_init.active_cb = injector_active_cb;
-    pulsed_output_init.inactive_cb = injector_inactive_cb; 
 
-    injector_output->pulsed_output = pulsed_output_get(&pulsed_output_init);
-    if (injector_output->pulsed_output == NULL)
-    {
-        injector_output = NULL;
-        goto done;
-    }
+    injector_output->pulser = pulser_get(injector_active_cb,
+                                         injector_inactive_cb,
+                                         injector_output);
 
+    /* XXX - This info should be maintained by the object owner. */
     injector_output->number = injector_number;
     injector_output->close_angle = injector_close_angle;
 
@@ -175,10 +187,10 @@ void injector_pulse_schedule(injector_output_st * const injector_output,
                              uint32_t initial_delay_us,
                              uint16_t pulse_us)
 {
-    pulsed_output_schedule(injector_output->pulsed_output, base_count, initial_delay_us, pulse_us);
+    pulser_schedule_pulse(injector_output->pulser, base_count, initial_delay_us, pulse_us);
 }
 
 uint32_t injector_timer_count_get(injector_output_st const * const injector_output)
 {
-    return pulse_output_timer_count_get(injector_output->pulsed_output);
+    return pulser_timer_count_get(injector_output->pulser);
 }

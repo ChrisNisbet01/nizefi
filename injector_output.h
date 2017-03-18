@@ -19,6 +19,7 @@ void injector_pulse_schedule(injector_output_st * const injector_output,
 uint32_t injector_timer_count_get(injector_output_st const * const injector_output);
 float injector_close_angle_get(injector_output_st const * const injector_output);
 size_t injector_number_get(injector_output_st const * const injector_output);
+float get_angle_when_injector_closed(void);
 
 
 #endif /* __INJECTOR_OUTPUT_H__ */

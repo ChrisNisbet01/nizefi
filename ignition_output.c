@@ -1,13 +1,25 @@
 #include "ignition_output.h"
-#include "pulsed_output.h"
+#include "pulser.h"
 #include "utils.h"
+#include "stm32f4xx_gpio.h"
 
 #include <stddef.h>
+
+/* TODO - Create a common GPIO config struct for all GPIO. */
+typedef struct gpio_config_st
+{
+    uint32_t RCC_AHBPeriph;
+    GPIO_TypeDef * port;
+    uint_fast16_t pin;
+} gpio_config_st; 
 
 struct ignition_output_st
 {
     gpio_config_st const * const gpio_config;
-    pulsed_output_st * pulsed_output;
+
+    float spark_angle;
+    size_t number; /* Which ignition is this. NOT the same as the cylinder number. */
+    pulser_st * pulser;
 };
 
 typedef enum ignition_index_t
@@ -80,13 +92,22 @@ float get_angle_when_ignition_sparked(void)
     return engine_cycle_angle;
 }
 
-static void ignition_active_cb(void)
+static void ignition_active_cb(void * const arg)
 {
+    ignition_output_st * const ignition_output = arg;
+    gpio_config_st const * const gpio_config = ignition_output->gpio_config;
+
+    GPIO_SetBits(gpio_config->port, gpio_config->pin);
 }
 
-static void ignition_inactive_cb(void)
+static void ignition_inactive_cb(void * const arg)
 {
-    float current_engine_cycle_angle_get(void);
+    ignition_output_st * const ignition_output = arg;
+    gpio_config_st const * const gpio_config = ignition_output->gpio_config; 
+    float current_engine_cycle_angle_get(void); 
+
+    GPIO_ResetBits(gpio_config->port, gpio_config->pin);
+
     engine_cycle_angle = current_engine_cycle_angle_get();
 }
 
@@ -113,11 +134,11 @@ static void initialise_ignition_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pi
 /* XXX - Consider an operational mode where mutliple ignition 
  * outputs should be fired at the same time. 
  */
-ignition_output_st * ignition_output_get(void)
+ignition_output_st * ignition_output_get(size_t const ignition_number,
+                                         float const ignition_spark_angle)
 {
     ignition_output_st * ignition_output;
     gpio_config_st const * gpio_config;
-    pulse_output_init_st pulsed_output_init; 
 
     if (next_ignition_output >= NUM_IGNITION_GPIOS)
     {
@@ -128,16 +149,13 @@ ignition_output_st * ignition_output_get(void)
     ignition_output = &ignition_outputs[next_ignition_output];
     gpio_config = ignition_output->gpio_config;
 
-    pulsed_output_init.gpio_config = gpio_config;
-    pulsed_output_init.active_cb = ignition_active_cb;
-    pulsed_output_init.inactive_cb = ignition_inactive_cb; 
+    ignition_output->pulser = pulser_get(ignition_active_cb,
+                                         ignition_inactive_cb,
+                                         ignition_output);
 
-    ignition_output->pulsed_output = pulsed_output_get(&pulsed_output_init);
-    if (ignition_output->pulsed_output == NULL)
-    {
-        ignition_output = NULL;
-        goto done;
-    }
+    /* XXX - This info should be maintained by the object owner. */
+    ignition_output->number = ignition_number;
+    ignition_output->spark_angle = ignition_spark_angle;
 
     next_ignition_output++;
 
@@ -148,16 +166,21 @@ done:
     return ignition_output;
 }
 
+size_t ignition_number_get(ignition_output_st * const ignition_output)
+{
+    return ignition_output->number;
+}
+
 void ignition_pulse_schedule(ignition_output_st * const ignition_output,
                              uint32_t const base_count,
                              uint32_t const initial_delay_us,
                              uint16_t const pulse_us)
 {
-    pulsed_output_schedule(ignition_output->pulsed_output, base_count, initial_delay_us, pulse_us);
+    pulser_schedule_pulse(ignition_output->pulser, base_count, initial_delay_us, pulse_us);
 }
 
 uint32_t ignition_timer_count_get(ignition_output_st const * const injector_output)
 {
-    return pulse_output_timer_count_get(injector_output->pulsed_output);
+    return pulser_timer_count_get(injector_output->pulser);
 }
 

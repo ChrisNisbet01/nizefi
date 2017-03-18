@@ -128,7 +128,6 @@ COMMON_SRC = \
 	$(SRC_DIR)/rpm_calculator.c \
 	$(SRC_DIR)/trigger_wheel_36_1.c \
 	$(SRC_DIR)/pulser.c \
-	$(SRC_DIR)/pulsed_output.c \
 	$(SRC_DIR)/ignition_output.c \
 	$(SRC_DIR)/injector_output.c \
 	$(SRC_DIR)/timers/*.c \
