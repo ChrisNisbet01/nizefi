@@ -57,9 +57,7 @@ struct pulser_st
      */
     uint_fast16_t pulse_width_us; /* The period of time the pulse should be active for. */
 
-    uint_fast16_t timer_end_us; /* time when the current event will occur. */
-
-    uint_fast32_t initial_delay_left_us;
+    uint_fast32_t initial_delay_remaining_us;
 
     volatile bool pending_event;
     pulser_schedule_st pending_schedule;
@@ -145,10 +143,9 @@ static void pulser_initial_delay_overflow_task_handler(pulser_st * pulser)
 {
     (void)pulser;
 
-    if (pulser->initial_delay_left_us > MAX_TIMER_TICKS_BEFORE_STAGING)
+    if (pulser->initial_delay_remaining_us > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
-        pulser->initial_delay_left_us -= TIMER_STAGE_TICKS;
-        pulser->timer_end_us += TIMER_STAGE_TICKS;
+        pulser->initial_delay_remaining_us -= TIMER_STAGE_TICKS;
 
         timer_channel_schedule_followup_event(pulser->timer_context, TIMER_STAGE_TICKS);
     }
@@ -156,10 +153,8 @@ static void pulser_initial_delay_overflow_task_handler(pulser_st * pulser)
     {
         pulser_set_state_initial_delay(pulser);
 
-        pulser->timer_end_us += pulser->initial_delay_left_us;
-
-        timer_channel_schedule_followup_event(pulser->timer_context, pulser->initial_delay_left_us);
-        pulser->initial_delay_left_us = 0;
+        timer_channel_schedule_followup_event(pulser->timer_context, pulser->initial_delay_remaining_us);
+        pulser->initial_delay_remaining_us = 0;
     }
 }
 
@@ -176,8 +171,6 @@ static void pulser_initial_delay_task_handler(pulser_st * pulser)
      * pulser active.
      */
     pulser_set_state_active(pulser);
-
-    pulser->timer_end_us += pulser->pulse_width_us;
 
     timer_channel_schedule_followup_event(pulser->timer_context, pulser->pulse_width_us);
 }
@@ -234,19 +227,18 @@ void pulser_schedule_pulse(pulser_st * const pulser,
 
     if (pulser_schedule->initial_delay_us > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
-        pulser->initial_delay_left_us = pulser_schedule->initial_delay_us - TIMER_STAGE_TICKS;
+        pulser->initial_delay_remaining_us = pulser_schedule->initial_delay_us - TIMER_STAGE_TICKS;
         initial_delay = TIMER_STAGE_TICKS;
         pulser_set_state_initial_delay_overflow(pulser);
     }
     else
     {
         initial_delay = pulser_schedule->initial_delay_us;
-        pulser->initial_delay_left_us = 0;
+        pulser->initial_delay_remaining_us = 0;
         pulser_set_state_initial_delay(pulser);
     }
 
     pulser->pulse_width_us = pulser_schedule->pulse_width_us; /* Remember the pulse width. */
-    pulser->timer_end_us = pulser_schedule->base_time + initial_delay;
 
     timer_channel_schedule_new_based_event(pulser->timer_context, pulser_schedule->base_time, initial_delay);
 
@@ -335,5 +327,5 @@ uint32_t pulser_timer_count_get(pulser_st const * const pulser)
 void print_pulser_debug(void)
 {
     printf("initial delay remaining: %"PRIu32"\r\n", 
-           (uint32_t)pulser_state.pulsers[0].initial_delay_left_us);
+           (uint32_t)pulser_state.pulsers[0].initial_delay_remaining_us);
 }
