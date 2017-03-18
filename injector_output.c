@@ -1,17 +1,9 @@
 #include "injector_output.h"
 #include "pulser.h"
 #include "utils.h"
-#include "stm32f4xx_gpio.h"
+#include "gpio_config.h"
 
 #include <stddef.h>
-
-/* TODO - Create a common GPIO config struct for all GPIO. */
-typedef struct gpio_config_st
-{
-    uint32_t RCC_AHBPeriph;
-    GPIO_TypeDef * port;
-    uint_fast16_t pin;
-} gpio_config_st;
 
 struct injector_output_st
 {
