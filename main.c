@@ -251,7 +251,7 @@ float get_ignition_advance(void)
 
 uint32_t get_ignition_dwell_us(void)
 {
-    return 20000;
+    return 3000;
 }
 
 void ignition_pulse_callback(float const crank_angle,
@@ -322,16 +322,12 @@ static void get_ignition_outputs(void)
 {
 #if 1
     unsigned int const num_ignitions = num_ignition_outputs_get();
-    unsigned int degrees_per_engine_cycle = get_engine_cycle_degrees();
-    float const degrees_per_cylinder_ignitionn = (float)degrees_per_engine_cycle / num_ignitions;
-    float const ignition_spark_angle = get_ignition_advance();
     size_t index;
 
     /* TODO: Ingition advance obviously varies. This is all just debug. */
     for (index = 0; index < num_ignitions; index++)
     {
-        ignitions[index] = ignition_output_get(index,
-                                               normalise_engine_cycle_angle(ignition_spark_angle + (degrees_per_cylinder_ignitionn * index)));
+        ignitions[index] = ignition_output_get(index);
     }
 #else
     size_t index;

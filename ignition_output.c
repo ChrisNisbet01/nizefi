@@ -9,7 +9,6 @@ struct ignition_output_st
 {
     gpio_config_st const * const gpio_config;
 
-    float spark_angle;
     size_t number; /* Which ignition is this. NOT the same as the cylinder number. */
     pulser_st * pulser;
 };
@@ -124,10 +123,9 @@ static void initialise_ignition_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pi
 }
 
 /* XXX - Consider an operational mode where mutliple ignition 
- * outputs should be fired at the same time. 
+ * outputs should be fired at the same time (wasted spark). 
  */
-ignition_output_st * ignition_output_get(size_t const ignition_number,
-                                         float const ignition_spark_angle)
+ignition_output_st * ignition_output_get(size_t const ignition_number)
 {
     ignition_output_st * ignition_output;
     gpio_config_st const * gpio_config;
@@ -147,7 +145,6 @@ ignition_output_st * ignition_output_get(size_t const ignition_number,
 
     /* XXX - This info should be maintained by the object owner. */
     ignition_output->number = ignition_number;
-    ignition_output->spark_angle = ignition_spark_angle;
 
     next_ignition_output++;
 
@@ -168,7 +165,14 @@ void ignition_pulse_schedule(ignition_output_st * const ignition_output,
                              uint32_t const initial_delay_us,
                              uint16_t const pulse_us)
 {
-    pulser_schedule_pulse(ignition_output->pulser, base_count, initial_delay_us, pulse_us);
+    pulser_schedule_st pulser_schedule =
+    {
+        .base_time = base_count,
+        .initial_delay_us = initial_delay_us,
+        .pulse_us = pulse_us
+    };
+
+    pulser_schedule_pulse(ignition_output->pulser, &pulser_schedule);
 }
 
 uint32_t ignition_timer_count_get(ignition_output_st const * const injector_output)

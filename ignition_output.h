@@ -8,8 +8,8 @@
 
 typedef struct ignition_output_st ignition_output_st;
 
-ignition_output_st * ignition_output_get(size_t const ignition_number,
-                                         float const ignition_spark_angle);
+ignition_output_st * ignition_output_get(size_t const ignition_number);
+
 void ignition_pulse_schedule(ignition_output_st * const ignition_output,
                              uint32_t const base_count,
                              uint32_t const initial_delay_us,

@@ -62,10 +62,7 @@ struct pulser_st
     uint_fast32_t initial_delay_left_us;
 
     volatile bool pending_event;
-    volatile uint32_t pending_base_time;
-    volatile uint32_t pending_initial_delay_us;
-    volatile uint_fast16_t pending_pulse_us;
-    volatile int_fast16_t event_overlap; /* Overlap between end of current event and base time of the next. */
+    pulser_schedule_st pending_schedule;
 };
 
 static void pulser_initial_delay_isr_handler(pulser_st * pulser);
@@ -122,9 +119,7 @@ static void pulser_set_state_idle(pulser_st * pulser)
     {
         pulser->pending_event = false;
         pulser_schedule_pulse(pulser,
-                              pulser->pending_base_time,
-                              pulser->pending_initial_delay_us,
-                              pulser->pending_pulse_us);
+                              &pulser->pending_schedule);
     }
 }
 
@@ -212,12 +207,10 @@ static void pulser_timer_callback(void * const arg)
 }
 
 void pulser_schedule_pulse(pulser_st * const pulser, 
-                           uint32_t const base_time, 
-                           uint32_t const initial_delay_us, 
-                           uint_fast16_t const pulse_us)
+                           pulser_schedule_st const * const pulser_schedule)
 {
-    uint32_t initial_delay = initial_delay_us;
-    pulser->active_us = pulse_us; /* Remember the pulse width. */
+    uint32_t initial_delay = pulser_schedule->initial_delay_us;
+    pulser->active_us = pulser_schedule->pulse_us; /* Remember the pulse width. */
 
     /* XXX Need to deal with race conditions here. */
     if (pulser->task_state_handler != pulser_idle_task_handler)
@@ -225,26 +218,13 @@ void pulser_schedule_pulse(pulser_st * const pulser,
         /* The pulser context hasn't finished with the previous 
          * event. 
          */
-        pulser->pending_base_time = base_time;
-        pulser->pending_initial_delay_us = initial_delay_us;
-        pulser->pending_pulse_us = pulse_us;
-        pulser->event_overlap = (int16_t)(pulser->timer_end_us - pulser->pending_base_time);
-
-        /* TODO: Still need to think about what to do when there is 
-         * overlap between one event and the next wrt what to do with 
-         * the timer base value. I'm not convinced I'm adjusting it 
-         * correctly here. Does it need adjusting at all?
-         */
-
-        pulser->pending_base_time += pulser->event_overlap;
-        pulser->pending_initial_delay_us -= pulser->event_overlap;
-
+        pulser->pending_schedule = *pulser_schedule;
         pulser->pending_event = true; 
 
         goto done;
     }
 
-    if (initial_delay_us > MAXIMUM_TIMER_LENGTH_SECS * TIMER_FREQUENCY)
+    if (initial_delay > MAXIMUM_TIMER_LENGTH_SECS * TIMER_FREQUENCY)
     {
         /* Shouldn't happen, but does once when first getting going. 
          * FIXME - XXX - Find out why this happens. Appears to be -ve 
@@ -254,10 +234,10 @@ void pulser_schedule_pulse(pulser_st * const pulser,
         goto done;
     }
 
-    if (initial_delay_us > MAX_TIMER_TICKS_BEFORE_STAGING)
+    if (initial_delay > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
         initial_delay = TIMER_STAGE_TICKS;
-        pulser->initial_delay_left_us = initial_delay_us - TIMER_STAGE_TICKS;
+        pulser->initial_delay_left_us = initial_delay - TIMER_STAGE_TICKS;
         pulser_set_state_initial_delay_overflow(pulser);
     }
     else
@@ -266,9 +246,9 @@ void pulser_schedule_pulse(pulser_st * const pulser,
         pulser_set_state_initial_delay(pulser);
     }
 
-    pulser->timer_end_us = base_time + initial_delay;
+    pulser->timer_end_us = pulser_schedule->base_time + initial_delay;
 
-    timer_channel_schedule_new_based_event(pulser->timer_context, base_time, initial_delay);
+    timer_channel_schedule_new_based_event(pulser->timer_context, pulser_schedule->base_time, initial_delay);
 
 done:
     return;
@@ -354,7 +334,6 @@ uint32_t pulser_timer_count_get(pulser_st const * const pulser)
 
 void print_pulser_debug(void)
 {
-    printf("eo: %d id: %"PRIu32"\r\n", 
-           (int)pulser_state.pulsers[0].event_overlap,
+    printf("initial delay remaining: %"PRIu32"\r\n", 
            (uint32_t)pulser_state.pulsers[0].initial_delay_left_us);
 }
