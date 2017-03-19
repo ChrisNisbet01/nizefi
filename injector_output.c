@@ -8,10 +8,6 @@
 struct injector_output_st
 {
     gpio_config_st const * const gpio_config;
-
-    float close_angle;
-    size_t number; /* Which injector is this. NOT the same as the cylinder number. */
-    pulser_st * pulser;
 };
 
 typedef enum injector_index_t
@@ -81,33 +77,9 @@ static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
 
 static size_t next_injector_output;
 
-static volatile float engine_cycle_angle;
-
-float get_angle_when_injector_closed(void)
-{
-    return engine_cycle_angle;
-}
-
-static void injector_active_cb(void * const arg)
-{
-    injector_output_st * const injector_output = arg;
-    gpio_config_st const * const gpio_config = injector_output->gpio_config;
-
-    GPIO_SetBits(gpio_config->port, gpio_config->pin);
-}
-
-static void injector_inactive_cb(void * const arg)
-{
-    injector_output_st * const injector_output = arg;
-    gpio_config_st const * const gpio_config = injector_output->gpio_config; 
-    float current_engine_cycle_angle_get(void); 
-
-    GPIO_ResetBits(gpio_config->port, gpio_config->pin);
-
-    engine_cycle_angle = current_engine_cycle_angle_get();
-}
-
-static void initialise_injector_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pin, uint32_t const RCC_AHBPeriph)
+static void initialise_injector_gpio(GPIO_TypeDef * const gpio, 
+                                     uint_fast16_t const pin, 
+                                     uint32_t const RCC_AHBPeriph)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
 
@@ -126,8 +98,7 @@ static void initialise_injector_gpio(GPIO_TypeDef * const gpio, uint_fast16_t pi
 /* XXX - Consider an operational mode where mutliple injectors 
  * should be fired at the same time (i.e. batch mode). 
  */
-injector_output_st * injector_output_get(size_t const injector_number,
-                                         float const injector_close_angle)
+injector_output_st * injector_output_get(void)
 {
     injector_output_st * injector_output;
     gpio_config_st const * gpio_config;
@@ -147,14 +118,6 @@ injector_output_st * injector_output_get(size_t const injector_number,
      * ADC, whatever). 
      */
 
-    injector_output->pulser = pulser_get(injector_active_cb,
-                                         injector_inactive_cb,
-                                         injector_output);
-
-    /* XXX - This info should be maintained by the object owner. */
-    injector_output->number = injector_number;
-    injector_output->close_angle = injector_close_angle;
-
     next_injector_output++;
 
     /* Initialise the GPIO. */
@@ -164,32 +127,17 @@ done:
     return injector_output;
 }
 
-float injector_close_angle_get(injector_output_st const * const injector_output)
+void injector_set_active(injector_output_st * const injector_output)
 {
-    return injector_output->close_angle;
+    gpio_config_st const * const gpio_config = injector_output->gpio_config;
+
+    GPIO_SetBits(gpio_config->port, gpio_config->pin);
 }
 
-size_t injector_number_get(injector_output_st const * const injector_output)
+void injector_set_inactive(injector_output_st * const injector_output)
 {
-    return injector_output->number;
+    gpio_config_st const * const gpio_config = injector_output->gpio_config;
+
+    GPIO_ResetBits(gpio_config->port, gpio_config->pin);
 }
 
-void injector_pulse_schedule(injector_output_st * const injector_output,
-                             uint32_t const base_count,
-                             uint32_t initial_delay_us,
-                             uint16_t pulse_us)
-{
-    pulser_schedule_st const pulser_schedule =
-    {
-        .base_time = base_count,
-        .initial_delay_us = initial_delay_us,
-        .pulse_width_us = pulse_us
-    };
-
-    pulser_schedule_pulse(injector_output->pulser, &pulser_schedule);
-}
-
-uint32_t injector_timer_count_get(injector_output_st const * const injector_output)
-{
-    return pulser_timer_count_get(injector_output->pulser);
-}
