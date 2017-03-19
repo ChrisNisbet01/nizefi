@@ -7,7 +7,7 @@
 
 struct injector_output_st
 {
-    gpio_config_st const * const gpio_config;
+    gpio_config_st const gpio_config;
 };
 
 typedef enum injector_index_t
@@ -25,55 +25,49 @@ typedef enum injector_index_t
 /* TODO - Support the gpio used on the Frankenso board. 
  * Support all 8 GPIO. 
  */
-static gpio_config_st const injector_gpios[] =
-{
-    {
-        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
-        .port = GPIOD,
-        .pin = GPIO_Pin_12
-    },
-    {
-        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
-        .port = GPIOD,
-        .pin = GPIO_Pin_13
-    },
-    {
-        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
-        .port = GPIOD,
-        .pin = GPIO_Pin_14
-    },
-    {
-        .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
-        .port = GPIOD,
-        .pin = GPIO_Pin_15
-    }
-};
-#define NUM_INJECTOR_GPIOS ARRAY_SIZE(injector_gpios)
 
-/* XXX - Must match the number of injector GPIO in the table 
- * above. 
- */
-static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
+static injector_output_st injector_outputs[] =
 {
     [injector_1_index] =
     {
-        .gpio_config = &injector_gpios[injector_1_index]
+        .gpio_config =     
+        {
+            .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
+            .port = GPIOD,
+            .pin = GPIO_Pin_12
+        }
     }
     ,
     [injector_2_index] =
     {
-        .gpio_config = &injector_gpios[injector_2_index]
+        .gpio_config = 
+        {
+            .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
+            .port = GPIOD,
+            .pin = GPIO_Pin_13
+        }
     }
     ,
     [injector_3_index] =
     {
-        .gpio_config = &injector_gpios[injector_3_index]
+        .gpio_config = 
+        {
+            .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
+            .port = GPIOD,
+            .pin = GPIO_Pin_14
+        }
     },
     [injector_4_index] =
     {
-        .gpio_config = &injector_gpios[injector_4_index]
+        .gpio_config = 
+        {
+            .RCC_AHBPeriph = RCC_AHB1Periph_GPIOD,
+            .port = GPIOD,
+            .pin = GPIO_Pin_15
+        }
     }
 };
+#define NUM_INJECTOR_GPIOS ARRAY_SIZE(injector_outputs)
 
 static size_t next_injector_output;
 
@@ -92,7 +86,7 @@ injector_output_st * injector_output_get(void)
     next_injector_output++;
 
     /* Initialise the GPIO. */
-    gpio_output_initialise(injector_output->gpio_config);
+    gpio_output_initialise(&injector_output->gpio_config);
 
 done:
     return injector_output;
@@ -100,11 +94,11 @@ done:
 
 void injector_set_active(injector_output_st * const injector_output)
 {
-    gpio_output_set_active(injector_output->gpio_config);
+    gpio_output_set_active(&injector_output->gpio_config);
 }
 
 void injector_set_inactive(injector_output_st * const injector_output)
 {
-    gpio_output_set_inactive(injector_output->gpio_config);
+    gpio_output_set_inactive(&injector_output->gpio_config);
 }
 
