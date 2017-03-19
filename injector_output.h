@@ -10,15 +10,6 @@ typedef struct injector_output_st injector_output_st;
 
 injector_output_st * injector_output_get(void);
 
-void injector_pulse_schedule(injector_output_st * const injector_output,
-                             uint32_t const base_count,
-                             uint32_t initial_delay_us,
-                             uint16_t pulse_us);
-
-uint32_t injector_timer_count_get(injector_output_st const * const injector_output);
-float injector_close_angle_get(injector_output_st const * const injector_output);
-size_t injector_number_get(injector_output_st const * const injector_output);
-float get_angle_when_injector_closed(void);
 void injector_set_active(injector_output_st * const injector_output);
 void injector_set_inactive(injector_output_st * const injector_output);
 

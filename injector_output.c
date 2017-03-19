@@ -121,7 +121,9 @@ injector_output_st * injector_output_get(void)
     next_injector_output++;
 
     /* Initialise the GPIO. */
-    initialise_injector_gpio(gpio_config->port, gpio_config->pin, gpio_config->RCC_AHBPeriph);
+    initialise_injector_gpio(gpio_config->port, 
+                             gpio_config->pin, 
+                             gpio_config->RCC_AHBPeriph);
 
 done:
     return injector_output;

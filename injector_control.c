@@ -187,9 +187,8 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
         injector_control_st * const injector_control = &injector_controls[index];
         float const injector_close_to_schedule_delay = 0.0;
 
-        float const injector_scheduling_angle = normalise_engine_cycle_angle(injector_control->close_angle
-                                                                             + injector_close_to_schedule_delay);
-        injector_control->scheduling_angle = normalise_engine_cycle_angle(injector_scheduling_angle);
+        injector_control->scheduling_angle = normalise_engine_cycle_angle(injector_control->close_angle
+                                                                          + injector_close_to_schedule_delay); 
 
         trigger_36_1_register_callback(trigger_wheel,
                                        injector_control->scheduling_angle,
