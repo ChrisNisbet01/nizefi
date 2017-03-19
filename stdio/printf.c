@@ -205,48 +205,57 @@ void reverse(char *str, int len)
  // Converts a given integer x to string str[].  d is the number
  // of digits required in output. If d is more than the number
  // of digits in x, then 0s are added at the beginning.
-int intToStr(int x, char str[], int d)
+int intToStr(unsigned int x, char str[], int d)
 {
     int i = 0;
     while (x)
     {
-        str[i++] = (x%10) + '0';
+        char ch = (x % 10) + '0'; 
+        str[i++] = ch;
         x = x/10;
     }
- 
     // If number of digits required is more, then
     // add 0s at the beginning
     while (i < d)
         str[i++] = '0';
- 
+    str[i] = '\0'; 
     reverse(str, i);
-    str[i] = '\0';
     return i;
 }
  
 // Converts a floating point number to string.
 int ftoa(float n, char *res, int afterpoint)
 {
+    int i = 0;
     // Extract integer part
-    int ipart = (int)n;
+    unsigned int ipart;
+    float fpart; 
+
  
+    if (n < 0.0)
+    {
+        n = -n;
+        res[i] = '-';
+        i++;
+    }
+    ipart = (unsigned int)n; 
     // Extract floating part
-    float fpart = n - (float)ipart;
- 
+    fpart = n - (float)ipart; 
+
     // convert integer part to string
-    int i = intToStr(ipart, res, 1);
+    i += intToStr(ipart, res + i, 1);
  
     // check for display option after point
     if (afterpoint != 0)
     {
         res[i] = '.';  // add dot
         i++;
-        // Get the value of fraction part upto given no.
+        // Get the value of fraction part up to given no.
         // of points after dot. The third parameter is needed
         // to handle cases like 233.007
         fpart = fpart * pow(10, afterpoint);
  
-        i += intToStr((int)fpart, res + i, afterpoint);
+        i += intToStr((unsigned int)fpart, res + i, afterpoint);
     }
 
     return i;
