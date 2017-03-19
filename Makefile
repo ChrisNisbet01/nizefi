@@ -120,6 +120,7 @@ LDFLAGS = $(CPU_FLAGS) \
 
 # now specify source files
 COMMON_SRC = \
+	$(SRC_DIR)/gpio_output.c \
 	$(SRC_DIR)/ignition_control.c \
 	$(SRC_DIR)/injector_control.c \
 	$(SRC_DIR)/leds.c \
