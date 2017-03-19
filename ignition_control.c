@@ -65,6 +65,9 @@ static void pulser_active_callback(void * const arg)
     ignition_control_st * const ignition_control = arg;
     ignition_output_st * const ignition = ignition_control->output;
 
+    /* TODO: support configurations where multiple outputs may 
+     * change state at the same times. 
+    */
     ignition_set_active(ignition);
 }
 
@@ -73,7 +76,11 @@ static void pulser_inactive_callback(void * const arg)
     ignition_control_st * const ignition_control = arg;
     ignition_output_st * const ignition = ignition_control->output;
 
+    /* TODO: support configurations where multiple outputs may 
+     * change state at the same times. 
+    */
     ignition_set_inactive(ignition);
+
     ignition_control->debug_engine_cycle_angle = current_engine_cycle_angle_get();
 }
 

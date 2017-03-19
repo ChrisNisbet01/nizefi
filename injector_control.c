@@ -89,6 +89,7 @@ static void pulser_inactive_callback(void * const arg)
     injector_output_st * const injector = injector_control->output;
 
     injector_set_inactive(injector);
+
     injector_control->debug_engine_cycle_angle = current_engine_cycle_angle_get(); 
 }
 
@@ -112,6 +113,9 @@ static void injector_pulse_callback(float const crank_angle,
     uint32_t const injector_us_until_open = lrintf(time_to_next_injector_close * TIMER_FREQUENCY) - injector_pulse_width_us;
     uint32_t const latency = hi_res_counter_val() - timestamp;
     uint32_t const injector_timer_count = pulser_timer_count_get(injector_control->pulser);
+    /* TODO - Timer base calculation should not have this clunky 
+     * mask. Create an API to get the adjust base from the pulser. 
+     */
     uint32_t const timer_base_count = (injector_timer_count - latency) & 0xffff; /* This is the time from which we base the injector event. */
 
     if ((int)injector_us_until_open < 0)

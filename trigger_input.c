@@ -17,6 +17,12 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+/* The CoOS queue system seems to have a bug in it such that 
+ * messages posted to the queue can arrive out of order. Sigh. 
+ * Rather than fix it I've used another method that uses the 
+ * CoOS flags to indicate that a message has been delivered to 
+ * a custom list of messages. This technique seems to work.
+ */
 #define USE_FLAG_METHOD
 
 /* 
@@ -454,6 +460,12 @@ static void initialise_cam_trigger_input(void)
 {
     trigger_gpio_config_st const * const gpio_config = &cam_trigger_gpio_config;
 
+    /* The cam input uses an external IRQ for a few reasons. 
+     * 1) It isn't connected to the same timer as the crank input. 
+     * 2) The time the cam signal is recieved isn't that important. 
+     * We just need to know that it has arrived so that we know 
+     * which half of the engine cycle we're in. 
+     */
     configure_gpio_pin(gpio_config);
 
     configure_gpio_external_irq(gpio_config);
@@ -492,6 +504,10 @@ void init_trigger_signals(trigger_wheel_36_1_context_st * const trigger_wheel_co
                  TRIGGER_SIGNAL_TASK_STACK_SIZE);
 
     initialise_crank_trigger_input();
+
+    /* TODO - The cam signal may or may not be required. It 
+     * depends on the type of engine (2 stroke - 4 stroke). 
+     */
     initialise_cam_trigger_input();
 }
 
