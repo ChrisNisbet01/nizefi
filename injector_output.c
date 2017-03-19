@@ -1,7 +1,6 @@
 #include "injector_output.h"
 #include "pulser.h"
 #include "utils.h"
-#include "gpio_config.h"
 #include "gpio_output.h"
 
 #include <stddef.h>
@@ -78,13 +77,9 @@ static injector_output_st injector_outputs[NUM_INJECTOR_GPIOS] =
 
 static size_t next_injector_output;
 
-/* XXX - Consider an operational mode where mutliple injectors 
- * should be fired at the same time (i.e. batch mode). 
- */
 injector_output_st * injector_output_get(void)
 {
     injector_output_st * injector_output;
-    gpio_config_st const * gpio_config;
 
     if (next_injector_output >= NUM_INJECTOR_GPIOS)
     {
@@ -93,20 +88,11 @@ injector_output_st * injector_output_get(void)
     }
 
     injector_output = &injector_outputs[next_injector_output];
-    gpio_config = injector_output->gpio_config;
-
-    /* TODO: Add support for getting the GPIO to use from a pool of
-     * GPIO? Each GPIO would have some flags indicating its
-     * capabilites (e.g. injector, ignition, relay, trigger input, 
-     * ADC, whatever). 
-     */
 
     next_injector_output++;
 
     /* Initialise the GPIO. */
-    gpio_output_initialise(gpio_config->port,
-                           gpio_config->pin, 
-                           gpio_config->RCC_AHBPeriph);
+    gpio_output_initialise(injector_output->gpio_config);
 
 done:
     return injector_output;

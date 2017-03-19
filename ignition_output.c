@@ -1,7 +1,7 @@
 #include "ignition_output.h"
 #include "pulser.h"
 #include "utils.h"
-#include "gpio_config.h"
+#include "gpio_output.h"
 
 #include <stddef.h>
 
@@ -73,35 +73,9 @@ static ignition_output_st ignition_outputs[NUM_IGNITION_GPIOS] =
 };
 static size_t next_ignition_output;
 
-static void initialise_ignition_gpio(GPIO_TypeDef * const gpio, 
-                                     uint_fast16_t const pin, 
-                                     uint32_t const RCC_AHBPeriph)
-{
-    /* XXX - Currently exactly the same as the equivalent function 
-     * in injector_output.c. Use a common function until they 
-     * deviate? 
-     */
-    GPIO_InitTypeDef GPIO_InitStructure;
-
-    /* GPIOD Periph clock enable */
-    RCC_AHB1PeriphClockCmd(RCC_AHBPeriph, ENABLE);
-
-    /* Configure in output push-pull mode */
-    GPIO_InitStructure.GPIO_Pin = pin;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-    GPIO_Init(gpio, &GPIO_InitStructure);
-}
-
-/* XXX - Consider an operational mode where mutliple ignition 
- * outputs should be fired at the same time (wasted spark). 
- */
 ignition_output_st * ignition_output_get(void)
 {
     ignition_output_st * ignition_output;
-    gpio_config_st const * gpio_config;
 
     if (next_ignition_output >= NUM_IGNITION_GPIOS)
     {
@@ -110,14 +84,11 @@ ignition_output_st * ignition_output_get(void)
     }
 
     ignition_output = &ignition_outputs[next_ignition_output];
-    gpio_config = ignition_output->gpio_config;
 
     next_ignition_output++;
 
     /* Initialise the GPIO. */
-    initialise_ignition_gpio(gpio_config->port, 
-                             gpio_config->pin, 
-                             gpio_config->RCC_AHBPeriph);
+    gpio_output_initialise(ignition_output->gpio_config);
 
 done:
     return ignition_output;
@@ -125,16 +96,12 @@ done:
 
 void ignition_set_active(ignition_output_st * const ignition_output)
 {
-    gpio_config_st const * const gpio_config = ignition_output->gpio_config;
-
-    GPIO_SetBits(gpio_config->port, gpio_config->pin);
+    gpio_output_set_active(ignition_output->gpio_config);
 }
 
 void ignition_set_inactive(ignition_output_st * const ignition_output)
 {
-    gpio_config_st const * const gpio_config = ignition_output->gpio_config;
-
-    GPIO_ResetBits(gpio_config->port, gpio_config->pin);
+    gpio_output_set_inactive(ignition_output->gpio_config);
 }
 
 
