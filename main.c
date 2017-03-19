@@ -157,6 +157,20 @@ float get_ignition_maximum_advance(void)
 
 }
 
+#define MAIN_TASK_STACK_SIZE 1024
+static __attribute((aligned(8))) OS_STK main_task_stack[MAIN_TASK_STACK_SIZE];
+static void main_task(void * arg)
+{
+    UNUSED(arg);
+
+    init_trigger_signals(trigger_context);
+
+    while (1)
+    {
+        CoTickDelay(1000000);
+    }
+}
+
 int main(void)
 {
     SystemInit();
@@ -180,8 +194,13 @@ int main(void)
     injection_initialise(trigger_context);
     ignition_initialise(trigger_context);
 
-    init_trigger_signals(trigger_context); /* Done after CoInitOS() as it uses CoOS resources. */
-
+    /* XXX signal processing should start after the RTOS starts. 
+     */
+    CoCreateTask(main_task,
+                 NULL,
+                 1,
+                 &main_task_stack[MAIN_TASK_STACK_SIZE - 1],
+                 MAIN_TASK_STACK_SIZE); 
 
     fprintf(stderr, "CoOS RTOS: Starting scheduler\r\n");
 
