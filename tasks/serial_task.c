@@ -88,6 +88,7 @@ static void newUartData( void *pv )
 static void handleNewSerialData( void )
 {
 	unsigned int uart_index;
+    static size_t output_index;
 
 	for (uart_index = 0; uart_index < ARRAY_SIZE(serialCli); uart_index++ )
 	{
@@ -130,20 +131,24 @@ static void handleNewSerialData( void )
                     }
                     if (ch == 'i')
                     {
-                        void print_injector_debug(void);
+                        void print_injector_debug(size_t const index);
 
-                        print_injector_debug();
+                        print_injector_debug(output_index);
                     }
                     if (ch == 'g')
                     {
-                        void print_ignition_debug(void);
+                        void print_ignition_debug(size_t index);
 
-                        print_ignition_debug();
+                        print_ignition_debug(output_index);
                     }
                     if (ch == 'p')
                     {
                         void print_pulser_debug(void);
                         print_pulser_debug();
+                    }
+                    if (ch == '0' || ch == '1' || ch == '2' || ch == '3')
+                    {
+                        output_index = ch - '0';
                     }
                 }
 			}

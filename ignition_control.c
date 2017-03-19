@@ -40,9 +40,9 @@ static unsigned int num_ignition_outputs_get(void)
 
 float debug_desired_spark_angle;
 
-void print_ignition_debug(void)
+void print_ignition_debug(size_t const index)
 {
-    ignition_control_st * const ignition_control = &ignition_controls[0];
+    ignition_control_st * const ignition_control = &ignition_controls[index];
     float const actual_spark_angle = ignition_control->debug_engine_cycle_angle;
     float const desired_spark_angle = ignition_control->spark_angle;
 
@@ -52,7 +52,8 @@ void print_ignition_debug(void)
      * scheduled which mucks things up. Some better debug would be 
      * nice. 
      */
-    printf("ignition_scheduling_angle %f desired %f actual spark %f error %f\r\n",
+    printf("ignition_scheduling_angle # %u %f desired %f actual spark %f error %f\r\n",
+           (int)index,
            ignition_control->latest_scheduling_angle,
            desired_spark_angle,
            actual_spark_angle,
