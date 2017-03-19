@@ -150,11 +150,11 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     }
 }
 
-void initialise_injection(trigger_wheel_36_1_context_st * const trigger_wheel_in)
+void injection_initialise(trigger_wheel_36_1_context_st * const trigger_wheel_in)
 {
     trigger_wheel = trigger_wheel_in;
-    get_injector_outputs();
 
+    get_injector_outputs();
     setup_injector_scheduling(trigger_wheel);
 }
 
