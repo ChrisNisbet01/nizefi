@@ -37,8 +37,6 @@ struct timer_channel_context_st
 
     capture_compare_config_st const * capture_config;
 
-    bool free_after_event; /* Set if the user attempts to free the timer while it is still in use. */
-
     timed_event_handler handler;
     void * arg;
 
