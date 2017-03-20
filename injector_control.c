@@ -23,6 +23,11 @@ typedef struct injector_control_st
     injector_output_st * output; /* The injector output to control */
     float debug_engine_cycle_angle; 
     float degrees_to_closing_time; /* Debug */
+    uint32_t debug_injector_us_until_open;
+    uint32_t debug_injector_pulse_width_us;
+    float debug_time_to_next_injector_close;
+    uint32_t debug_latency;
+    uint32_t debug_timer_base_count; 
 
 } injector_control_st;
 
@@ -52,28 +57,25 @@ uint32_t get_injector_dead_time_us(void)
     return TEST_INJECTOR_DEAD_TIME_US;
 }
 
-/* Store some debug values */
-static uint32_t debug_injector_us_until_open;
-static uint32_t debug_injector_pulse_width_us;
-float debug_injector_close_angle_atdc;
-float debug_injector_scheduling_angle;
-float debug_time_to_next_injector_close;
-uint32_t debug_latency;
-uint32_t debug_timer_base_count;
-
 void print_injector_debug(size_t const index)
 {
     injector_control_st * const injector_control = &injector_controls[index];
 
-    printf("\r\ninj %d\r\n", index);
-    printf("delay %"PRIu32" width %"PRIu32"\r\n", debug_injector_us_until_open, debug_injector_pulse_width_us);
-    printf("close angle %f scheduling angle %f time to close %f\r\n",
-           injector_control->close_angle,
+    printf("injector_scheduling_angle # %u %f desired %f actual close %f error %f\r\n",
+           (int)index,
            injector_control->latest_scheduling_angle,
-           debug_time_to_next_injector_close);
-    printf("degree until closing %f\r\n", injector_control->degrees_to_closing_time);
-    printf("latency %"PRIu32" base %"PRIu32"\r\n\r\n", debug_latency, debug_timer_base_count);
-    printf("\r\nactual close %f\r\n", injector_control->debug_engine_cycle_angle);
+           injector_control->close_angle,
+           injector_control->debug_engine_cycle_angle,
+           injector_control->debug_engine_cycle_angle - injector_control->close_angle
+           ); 
+
+    printf("delay %"PRIu32" width %"PRIu32"\r\n", 
+           injector_control->debug_injector_us_until_open, 
+           injector_control->debug_injector_pulse_width_us);
+    printf("time until closing %f degrees %f\r\n",
+           injector_control->debug_time_to_next_injector_close,
+           injector_control->degrees_to_closing_time);
+    printf("latency %"PRIu32" base %"PRIu32"\r\n\r\n", injector_control->debug_latency, injector_control->debug_timer_base_count);
 }
 
 static void pulser_active_callback(void * const arg)
@@ -125,15 +127,13 @@ static void injector_pulse_callback(float const crank_angle,
         /* XXX - TODO - Update a statistic? */
         goto done;
     }
-    injector_control->latest_scheduling_angle = injector_scheduling_angle;
 
-    debug_latency = latency;
-    debug_timer_base_count = timer_base_count;
-    debug_injector_close_angle_atdc = injector_close_angle;
-    debug_injector_scheduling_angle = injector_scheduling_angle;
-    debug_time_to_next_injector_close = time_to_next_injector_close;
-    debug_injector_us_until_open = injector_us_until_open;
-    debug_injector_pulse_width_us = injector_pulse_width_us;
+    injector_control->latest_scheduling_angle = injector_scheduling_angle;
+    injector_control->debug_latency = latency;
+    injector_control->debug_timer_base_count = timer_base_count;
+    injector_control->debug_time_to_next_injector_close = time_to_next_injector_close;
+    injector_control->debug_injector_us_until_open = injector_us_until_open;
+    injector_control->debug_injector_pulse_width_us = injector_pulse_width_us;
 #else
     uint32_t const timer_base_count = injector_timer_count_get(injector); /* This is the time from which we base the injector event. */
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();

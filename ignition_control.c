@@ -43,8 +43,6 @@ float debug_desired_spark_angle;
 void print_ignition_debug(size_t const index)
 {
     ignition_control_st * const ignition_control = &ignition_controls[index];
-    float const actual_spark_angle = ignition_control->debug_engine_cycle_angle;
-    float const desired_spark_angle = ignition_control->spark_angle;
 
     /* Note that the desired and actual values don't match up 
      * because of the delay between scheduling the pulse and when 
@@ -55,9 +53,9 @@ void print_ignition_debug(size_t const index)
     printf("ignition_scheduling_angle # %u %f desired %f actual spark %f error %f\r\n",
            (int)index,
            ignition_control->latest_scheduling_angle,
-           desired_spark_angle,
-           actual_spark_angle,
-           actual_spark_angle - desired_spark_angle
+           ignition_control->spark_angle,
+           ignition_control->debug_engine_cycle_angle,
+           ignition_control->debug_engine_cycle_angle - ignition_control->spark_angle
            );
 }
 
