@@ -30,21 +30,12 @@
  */
 #define TIMER_STAGE_TICKS 30000UL
 
-/* Sigh, I think this RTOS is full of bugs. Use a semaphore and 
- * the pulses all go to shit. 
- */ 
-#define USE_SEMAPHORE 0
-
 typedef void (* state_handler)(pulser_st * pulser);
 
 struct pulser_st
 {
     OS_FlagID event_completion_flag; /* Used to signal the pulser task to run from the ISR. */
     uint32_t event_completion_bit; 
-
-#if USE_SEMAPHORE
-    OS_EventID scheduling_mutex;
-#endif
 
     /* ISR level and task level state machine handlers. */
     volatile state_handler isr_state_handler;
@@ -179,10 +170,6 @@ done:
 
 static void pulser_set_state_idle(pulser_st * pulser)
 {
-#if USE_SEMAPHORE
-    CoPendSem(pulser->scheduling_mutex, 0); 
-#endif
-
     pulser->isr_state_handler = pulser_idle_isr_handler;
     pulser->task_state_handler = pulser_idle_task_handler;
 
@@ -194,10 +181,6 @@ static void pulser_set_state_idle(pulser_st * pulser)
         pulser_schedule_pulse(pulser,
                               &pulser->pending_schedule);
     }
-
-#if USE_SEMAPHORE
-    CoPostSem(pulser->scheduling_mutex);
-#endif
 }
 
 static void pulser_initial_delay_overflow_task_handler(pulser_st * pulser)
@@ -264,10 +247,6 @@ static void pulser_timer_callback(void * const arg)
 void pulser_schedule_pulse(pulser_st * const pulser, 
                            pulser_schedule_st const * const pulser_schedule)
 {
-#if USE_SEMAPHORE
-    CoPendSem(pulser->scheduling_mutex, 0);
-#endif
-
     if (pulser->task_state_handler != pulser_idle_task_handler)
     {
         /* The pulser context hasn't finished with the previous 
@@ -282,9 +261,6 @@ void pulser_schedule_pulse(pulser_st * const pulser,
     schedule_pulse(pulser, pulser_schedule);
 
 done:
-#if USE_SEMAPHORE
-    CoPostSem(pulser->scheduling_mutex);
-#endif
 
     return;
 }
@@ -350,10 +326,6 @@ void init_pulsers(void)
 
         pulser->event_completion_flag = CoCreateFlag(Co_TRUE, Co_FALSE);
         pulser->event_completion_bit = 1 << pulser->event_completion_flag;
-
-#if USE_SEMAPHORE
-        pulser->scheduling_mutex = CoCreateSem(1, 1, EVENT_SORT_TYPE_FIFO);
-#endif
 
         pulser->pending_event = false;
 
