@@ -28,7 +28,7 @@
  * there will still be a reasonable time left to schedule the 
  * next event. 
  */
-#define TIMER_STAGE_TICKS 30000UL
+#define MAX_TIMER_STAGE_TICKS 30000UL
 
 typedef void (* state_handler)(pulser_st * pulser);
 
@@ -149,8 +149,8 @@ static void schedule_pulse(pulser_st * const pulser, pulser_schedule_st const * 
 
     if (initial_delay > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
-        pulser->current_schedule.initial_delay_us = initial_delay - TIMER_STAGE_TICKS;
-        initial_delay = TIMER_STAGE_TICKS;
+        pulser->current_schedule.initial_delay_us = initial_delay - MAX_TIMER_STAGE_TICKS;
+        initial_delay = MAX_TIMER_STAGE_TICKS;
         pulser_set_state_initial_delay_overflow(pulser);
     }
     else
@@ -185,21 +185,21 @@ static void pulser_set_state_idle(pulser_st * pulser)
 
 static void pulser_initial_delay_overflow_task_handler(pulser_st * pulser)
 {
+    int32_t next_delay;
     (void)pulser;
 
     if (pulser->current_schedule.initial_delay_us > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
-        pulser->current_schedule.initial_delay_us -= TIMER_STAGE_TICKS;
-
-        timer_channel_schedule_followup_event(pulser->timer_context, TIMER_STAGE_TICKS);
+        next_delay = MAX_TIMER_STAGE_TICKS;
     }
     else
     {
+        next_delay = pulser->current_schedule.initial_delay_us;
         pulser_set_state_initial_delay(pulser);
-
-        timer_channel_schedule_followup_event(pulser->timer_context, pulser->current_schedule.initial_delay_us);
-        pulser->current_schedule.initial_delay_us = 0;
     }
+
+    pulser->current_schedule.initial_delay_us -= next_delay;
+    timer_channel_schedule_followup_event(pulser->timer_context, next_delay);
 }
 
 static void pulser_initial_delay_isr_handler(pulser_st * pulser)
