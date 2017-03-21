@@ -40,11 +40,11 @@ typedef void (* state_handler)(pulser_st * pulser);
 struct pulser_st
 {
     OS_FlagID event_completion_flag; /* Used to signal the pulser task to run from the ISR. */
+    uint32_t event_completion_bit; 
+
 #if USE_SEMAPHORE
     OS_EventID scheduling_mutex;
 #endif
-
-    uint32_t event_completion_bit;
 
     /* ISR level and task level state machine handlers. */
     volatile state_handler isr_state_handler;
@@ -56,19 +56,7 @@ struct pulser_st
     pulser_callback inactive_callback; 
     void * user_arg;
 
-    /* TODO: Add support for overlapping pulses. It is entirely 
-     * possible (when engine is highly loaded at high RPM) that 
-     * one pulse could be scheduled when the previous hasn't 
-     * completed. It should _not_ be possible for the new request 
-     * to request a start time before the previous one finishes. 
-     * May need to update the initial delay on the new request to 
-     * account for the delay in starting the timer. 
-     */
-    uint_fast16_t pulse_width_us; /* The period of time the pulse should be active for. */
-
-    int_fast32_t initial_delay_remaining_us;
-
-    volatile bool pending_event;
+    volatile bool pending_event; /* true when the pending schedule has been configured. */
     pulser_schedule_st pending_schedule;
 
     pulser_schedule_st current_schedule;
@@ -170,7 +158,7 @@ static void schedule_pulse(pulser_st * const pulser, pulser_schedule_st const * 
 
     if (initial_delay > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
-        pulser->initial_delay_remaining_us = initial_delay - TIMER_STAGE_TICKS;
+        pulser->current_schedule.initial_delay_us = initial_delay - TIMER_STAGE_TICKS;
         initial_delay = TIMER_STAGE_TICKS;
         pulser_set_state_initial_delay_overflow(pulser);
     }
@@ -179,11 +167,9 @@ static void schedule_pulse(pulser_st * const pulser, pulser_schedule_st const * 
         /* Noe need to worry about timer oveflows as the amount of 
          * time to wait is much less than the timer counter width. 
          */
-        pulser->initial_delay_remaining_us = 0;
+        pulser->current_schedule.initial_delay_us = 0;
         pulser_set_state_initial_delay(pulser);
     }
-
-    pulser->pulse_width_us = pulser_schedule->pulse_width_us; /* Remember the pulse width. */
 
     timer_channel_schedule_new_event(pulser->timer_context, initial_delay);
 
@@ -218,9 +204,9 @@ static void pulser_initial_delay_overflow_task_handler(pulser_st * pulser)
 {
     (void)pulser;
 
-    if (pulser->initial_delay_remaining_us > MAX_TIMER_TICKS_BEFORE_STAGING)
+    if (pulser->current_schedule.initial_delay_us > MAX_TIMER_TICKS_BEFORE_STAGING)
     {
-        pulser->initial_delay_remaining_us -= TIMER_STAGE_TICKS;
+        pulser->current_schedule.initial_delay_us -= TIMER_STAGE_TICKS;
 
         timer_channel_schedule_followup_event(pulser->timer_context, TIMER_STAGE_TICKS);
     }
@@ -228,8 +214,8 @@ static void pulser_initial_delay_overflow_task_handler(pulser_st * pulser)
     {
         pulser_set_state_initial_delay(pulser);
 
-        timer_channel_schedule_followup_event(pulser->timer_context, pulser->initial_delay_remaining_us);
-        pulser->initial_delay_remaining_us = 0;
+        timer_channel_schedule_followup_event(pulser->timer_context, pulser->current_schedule.initial_delay_us);
+        pulser->current_schedule.initial_delay_us = 0;
     }
 }
 
@@ -247,7 +233,7 @@ static void pulser_initial_delay_task_handler(pulser_st * pulser)
      */
     pulser_set_state_active(pulser);
 
-    timer_channel_schedule_followup_event(pulser->timer_context, pulser->pulse_width_us);
+    timer_channel_schedule_followup_event(pulser->timer_context, pulser->current_schedule.pulse_width_us);
 }
 
 static void pulser_active_isr_handler(pulser_st * pulser)
@@ -397,6 +383,6 @@ void print_pulser_debug(size_t const index)
            );
     printf("programmed at %"PRIu32" scheduled at %"PRIu32"\r\n", pulser->programmed_at, pulser->scheduled_at);
     printf("initial delay remaining: %"PRIu32" current time %"PRIu32"\r\n", 
-           (uint32_t)pulser->initial_delay_remaining_us, hi_res_counter_val());
+           (uint32_t)pulser->current_schedule.initial_delay_us, hi_res_counter_val());
     printf("\r\n");
 }
