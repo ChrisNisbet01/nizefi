@@ -103,10 +103,11 @@ void ignition_pulse_callback(float const crank_angle,
                                                                     (float)degrees_per_engine_cycle - normalise_crank_angle(ignition_scheduling_angle - ignition_spark_angle));
     /* The injector pulse width must include the time taken to open the injector (dead time). */
     uint32_t const ignition_pulse_width_us = get_ignition_dwell_us();
-    uint32_t const ignition_us_until_open = lrintf(time_to_next_spark * TIMER_FREQUENCY) - ignition_pulse_width_us;
-    uint32_t const latency = hi_res_counter_val() - timestamp;
-    uint32_t const ignition_timer_count = pulser_timer_count_get(ignition_control->pulser);
-    uint32_t const timer_base_count = (ignition_timer_count - latency) & 0xffff; /* This is the time from which we base the injector event. */
+    uint32_t ignition_us_until_open = lrintf(time_to_next_spark * TIMER_FREQUENCY) - ignition_pulse_width_us;
+    uint32_t const current_timestamp = hi_res_counter_val();
+    uint32_t const latency = current_timestamp - timestamp;
+
+    ignition_us_until_open -= latency;
 
     ignition_control->latest_scheduling_angle = ignition_scheduling_angle;
     ignition_control->spark_angle = ignition_spark_angle;
@@ -129,9 +130,9 @@ void ignition_pulse_callback(float const crank_angle,
     {
         pulser_schedule_st const pulser_schedule =
         {
-            .base_time = timer_base_count,
             .initial_delay_us = ignition_us_until_open,
-            .pulse_width_us = ignition_pulse_width_us
+            .pulse_width_us = ignition_pulse_width_us,
+            .programmed_at = current_timestamp
         };
         pulser_schedule_pulse(ignition_control->pulser, &pulser_schedule);
     }

@@ -143,8 +143,9 @@ static void handleNewSerialData( void )
                     }
                     if (ch == 'p')
                     {
-                        void print_pulser_debug(void);
-                        print_pulser_debug();
+                        void print_pulser_debug(size_t const index);
+
+                        print_pulser_debug(output_index);
                     }
                     if (ch == '0' || ch == '1' || ch == '2' || ch == '3')
                     {

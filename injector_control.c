@@ -15,6 +15,7 @@ typedef struct injector_control_st
     float close_angle;
     float scheduling_angle; /* Desired scheduling angle. */
     float latest_scheduling_angle; /* Actual scheduling angle. Will always be after the desired angle due to latency in the system. */
+    uint32_t debug_scheduling_timestamp;
 
     pulser_st * pulser;
 
@@ -28,6 +29,8 @@ typedef struct injector_control_st
     float debug_time_to_next_injector_close;
     uint32_t debug_latency;
     uint32_t debug_timer_base_count; 
+    uint32_t close_timestamp;
+    uint32_t open_timestamp; 
 
 } injector_control_st;
 
@@ -61,14 +64,16 @@ void print_injector_debug(size_t const index)
 {
     injector_control_st * const injector_control = &injector_controls[index];
 
-    printf("injector_scheduling_angle # %u %f desired %f actual close %f error %f\r\n",
+    printf("inj %d time %"PRIu32" scheduling_angle %f desired %f actual close %f error %f\r\n",
            (int)index,
+           injector_control->debug_scheduling_timestamp,
            injector_control->latest_scheduling_angle,
            injector_control->close_angle,
            injector_control->debug_engine_cycle_angle,
            injector_control->debug_engine_cycle_angle - injector_control->close_angle
            ); 
-
+    printf("\r\ntime between scheduled and closing %"PRId32"\r\n",
+           injector_control->close_timestamp - injector_control->debug_scheduling_timestamp);
     printf("delay %"PRIu32" width %"PRIu32"\r\n", 
            injector_control->debug_injector_us_until_open, 
            injector_control->debug_injector_pulse_width_us);
@@ -76,6 +81,7 @@ void print_injector_debug(size_t const index)
            injector_control->debug_time_to_next_injector_close,
            injector_control->degrees_to_closing_time);
     printf("latency %"PRIu32" base %"PRIu32"\r\n\r\n", injector_control->debug_latency, injector_control->debug_timer_base_count);
+    printf("pulse width %"PRIu32"\r\n", injector_control->close_timestamp - injector_control->open_timestamp);
 }
 
 static void pulser_active_callback(void * const arg)
@@ -84,6 +90,8 @@ static void pulser_active_callback(void * const arg)
     injector_output_st * const injector = injector_control->output;
 
     injector_set_active(injector);
+    injector_control->open_timestamp = hi_res_counter_val(); 
+
 }
 
 static void pulser_inactive_callback(void * const arg)
@@ -94,6 +102,7 @@ static void pulser_inactive_callback(void * const arg)
     injector_set_inactive(injector);
 
     injector_control->debug_engine_cycle_angle = current_engine_cycle_angle_get(); 
+    injector_control->close_timestamp = hi_res_counter_val();
 }
 
 static void injector_pulse_callback(float const crank_angle,
@@ -113,13 +122,16 @@ static void injector_pulse_callback(float const crank_angle,
     float const time_to_next_injector_close = trigger_36_1_rotation_time_get(trigger_wheel, injector_control->degrees_to_closing_time);
     /* The injector pulse width must include the time taken to open the injector (dead time). */
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us() + get_injector_dead_time_us();
-    uint32_t const injector_us_until_open = lrintf(time_to_next_injector_close * TIMER_FREQUENCY) - injector_pulse_width_us;
-    uint32_t const latency = hi_res_counter_val() - timestamp;
+    uint32_t injector_us_until_open = lrintf(time_to_next_injector_close * TIMER_FREQUENCY) - injector_pulse_width_us;
+    uint32_t const current_timestamp = hi_res_counter_val();
+    uint32_t const latency = current_timestamp - timestamp;
     uint32_t const injector_timer_count = pulser_timer_count_get(injector_control->pulser);
-    /* TODO - Timer base calculation should not have this clunky 
-     * mask. Create an API to get the adjust base from the pulser. 
+    uint32_t const timer_base_count = injector_timer_count; /* This is the time from which we base the injector event. */
+
+    /* Remove the measured latency from the time delay before 
+     * opening the injector. 
      */
-    uint32_t const timer_base_count = (injector_timer_count - latency) & 0xffff; /* This is the time from which we base the injector event. */
+    injector_us_until_open -= latency;
 
     if ((int)injector_us_until_open < 0)
     {
@@ -134,6 +146,8 @@ static void injector_pulse_callback(float const crank_angle,
     injector_control->debug_time_to_next_injector_close = time_to_next_injector_close;
     injector_control->debug_injector_us_until_open = injector_us_until_open;
     injector_control->debug_injector_pulse_width_us = injector_pulse_width_us;
+    injector_control->debug_scheduling_timestamp = current_timestamp;
+
 #else
     uint32_t const timer_base_count = injector_timer_count_get(injector); /* This is the time from which we base the injector event. */
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us();
@@ -144,9 +158,9 @@ static void injector_pulse_callback(float const crank_angle,
     {
         pulser_schedule_st const pulser_schedule =
         {
-            .base_time = timer_base_count,
             .initial_delay_us = injector_us_until_open,
-            .pulse_width_us = injector_pulse_width_us
+            .pulse_width_us = injector_pulse_width_us,
+            .programmed_at = current_timestamp
         };
         pulser_schedule_pulse(injector_control->pulser, &pulser_schedule);
     }
@@ -189,10 +203,10 @@ static void setup_injector_scheduling(trigger_wheel_36_1_context_st * const trig
     for (index = 0; index < num_injectors; index++)
     {
         injector_control_st * const injector_control = &injector_controls[index];
-        float const injector_close_to_schedule_delay = 0.0;
+        float const injector_close_to_scheduling_angle = 0.0;
 
         injector_control->scheduling_angle = normalise_engine_cycle_angle(injector_control->close_angle
-                                                                          + injector_close_to_schedule_delay); 
+                                                                          + injector_close_to_scheduling_angle);
 
         trigger_36_1_register_callback(trigger_wheel,
                                        injector_control->scheduling_angle,

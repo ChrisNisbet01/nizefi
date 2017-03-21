@@ -163,6 +163,17 @@ static void main_task(void * arg)
 {
     UNUSED(arg);
 
+    initSerialTask();
+
+    fprintf(stderr, "CoOS RTOS: Started scheduler\r\n");
+
+    init_pulsers();
+
+    trigger_context = trigger_36_1_init();
+
+    injection_initialise(trigger_context);
+    ignition_initialise(trigger_context);
+
     init_trigger_signals(trigger_context);
 
     while (1)
@@ -185,24 +196,11 @@ int main(void)
 
     CoInitOS(); /*!< Initialise CoOS */
 
-    initSerialTask();
-
-    init_pulsers();
-
-    trigger_context = trigger_36_1_init();
-
-    injection_initialise(trigger_context);
-    ignition_initialise(trigger_context);
-
-    /* XXX signal processing should start after the RTOS starts. 
-     */
     CoCreateTask(main_task,
                  NULL,
                  1,
                  &main_task_stack[MAIN_TASK_STACK_SIZE - 1],
                  MAIN_TASK_STACK_SIZE); 
-
-    fprintf(stderr, "CoOS RTOS: Starting scheduler\r\n");
 
     CoStartOS(); /* Start scheduler. */
 

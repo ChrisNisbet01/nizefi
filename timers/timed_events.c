@@ -16,6 +16,8 @@ typedef struct capture_compare_config_st
     uint32_t const capture_compare_event_source;
     void (* TIM_SetCompare)(TIM_TypeDef * TIMx, uint32_t Compare);
     uint32_t (* TIM_GetCapture)(TIM_TypeDef * TIMx); 
+    void (* TIM_GenerateEvent)(TIM_TypeDef * TIMx, uint16_t TIM_EventSource);
+
 } capture_compare_config_st;
 
 typedef enum capture_compare_index_t
@@ -68,7 +70,7 @@ static capture_compare_config_st capture_compare_configs[] =
         .capture_compare_interrupt = TIM_IT_CC1,
         .capture_compare_event_source = TIM_EventSource_CC1,
         .TIM_SetCompare = TIM_SetCompare1,
-        .TIM_GetCapture = TIM_GetCapture1
+        .TIM_GetCapture = TIM_GetCapture1,
     },
     [capture_2_index] =
     {
@@ -305,15 +307,11 @@ void timer_channel_schedule_new_event(timer_channel_context_st * const channel, 
 {
     capture_compare_config_st const * const capture_config = channel->capture_config;
     TIM_TypeDef * const TIMx = channel->timer->TIM;
-    uint32_t const cnt = TIM_GetCounter(TIMx);
 
     TIM_ITConfig(TIMx, capture_config->capture_compare_interrupt, DISABLE);
     TIM_ClearITPendingBit(TIMx, capture_config->capture_compare_interrupt);
 
-    capture_config->TIM_SetCompare(TIMx, (uint16_t)(cnt + delay_us));
-    /* Note: Use TIM_GenerateEvent() to generate an event right 
-     * away. 
-     */
+    capture_config->TIM_SetCompare(TIMx, (uint16_t)(TIM_GetCounter(TIMx) + delay_us));
     TIM_ITConfig(TIMx, capture_config->capture_compare_interrupt, ENABLE);
 }
 

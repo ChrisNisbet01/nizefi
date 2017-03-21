@@ -226,13 +226,13 @@ events including semaphore,mailbox,queue.
 /*!<
 Event sort type.(1)FIFO (2)PRI (3)FIFO+PRI
 */
-#define CFG_EVENT_SORT          (3)
+#define CFG_EVENT_SORT          (1)
 
 /*!<
 Max number of event.(must be less than 255)
 Event = semaphore + mailbox + queue;
 */
-#define CFG_MAX_EVENT           (20)
+#define CFG_MAX_EVENT           (50)
 
 /*!<
 Enable(1) or disable(0) semaphore management.
