@@ -3,7 +3,7 @@
 #include "pulser.h"
 #include "utils.h"
 #include "main.h"
-#include "hi_res_timer.h"
+#include "main_input_timer.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -90,7 +90,7 @@ static void pulser_active_callback(void * const arg)
     injector_output_st * const injector = injector_control->output;
 
     injector_set_active(injector);
-    injector_control->open_timestamp = hi_res_counter_val(); 
+    injector_control->open_timestamp = main_input_timer_count_get();
 
 }
 
@@ -102,7 +102,7 @@ static void pulser_inactive_callback(void * const arg)
     injector_set_inactive(injector);
 
     injector_control->debug_engine_cycle_angle = current_engine_cycle_angle_get(); 
-    injector_control->close_timestamp = hi_res_counter_val();
+    injector_control->close_timestamp = main_input_timer_count_get();
 }
 
 static void injector_pulse_callback(float const crank_angle,
@@ -123,7 +123,7 @@ static void injector_pulse_callback(float const crank_angle,
     /* The injector pulse width must include the time taken to open the injector (dead time). */
     uint32_t const injector_pulse_width_us = get_injector_pulse_width_us() + get_injector_dead_time_us();
     uint32_t injector_us_until_open = lrintf(time_to_next_injector_close * TIMER_FREQUENCY) - injector_pulse_width_us;
-    uint32_t const current_timestamp = hi_res_counter_val();
+    uint32_t const current_timestamp = main_input_timer_count_get();
     uint32_t const latency = current_timestamp - timestamp;
     uint32_t const injector_timer_count = pulser_timer_count_get(injector_control->pulser);
     uint32_t const timer_base_count = injector_timer_count; /* This is the time from which we base the injector event. */

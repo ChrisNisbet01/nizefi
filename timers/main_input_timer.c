@@ -1,4 +1,4 @@
-#include "hi_res_timer.h"
+#include "main_input_timer.h"
 
 #include "stm32f4_utils.h"
 #include "utils.h"
@@ -118,7 +118,7 @@ void TIM2_IRQHandler(void)
     }
 }
 
-uint32_t hi_res_counter_val(void)
+uint32_t main_input_timer_count_get(void)
 {
     return TIM_GetCounter(TIM2);
 }
@@ -173,7 +173,7 @@ void register_crank_trigger_callback(void (* callback)(uint32_t const timestamp_
     register_input_trigger_callback(CRANK_INPUT_CAPTURE_INDEX, callback);
 }
 
-void initHiResTimer(uint32_t const frequency)
+void main_input_timer_init(uint32_t const frequency)
 {
     /* Enable peripheral clock for the timer. */
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
@@ -185,10 +185,6 @@ void initHiResTimer(uint32_t const frequency)
 
     /* start the timer */
     TIM_Cmd(TIM2, ENABLE);
-
-    /* No interrupts required at this stage, so don't do the NVIC 
-     * setup. 
-     */
 }
 
 

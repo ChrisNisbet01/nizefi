@@ -39,7 +39,7 @@
 #include "ignition_control.h"
 #include "trigger_input.h"
 #include "leds.h"
-#include "hi_res_timer.h"
+#include "main_input_timer.h"
 #include "serial_task.h"
 #include "queue.h"
 #include "utils.h"
@@ -188,7 +188,7 @@ int main(void)
 
     init_leds();
 
-    initHiResTimer(TIMER_FREQUENCY);
+    main_input_timer_init(TIMER_FREQUENCY);
 
     //init_button();
 

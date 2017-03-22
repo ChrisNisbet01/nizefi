@@ -6,7 +6,7 @@
 #include <math.h>
 #include <coocox.h>
 #include <serial.h>
-#include "hi_res_timer.h"
+#include "main_input_timer.h"
 #include "pulser.h"
 #include "utils.h"
 
@@ -164,7 +164,7 @@ void show_sysclock_info(uint32_t val)
     RCC_GetClocksFreq(&clocks);
     printf("clock rate count %"PRIu32"\r\n", val);
     printf("new_time         %"PRIu32"\r\n", new_time);
-    printf("hi_res_counter_val %"PRIu32"\r\n", hi_res_counter_val());
+    printf("hi_res_counter_val %"PRIu32"\r\n", main_input_timer_count_get());
     printf("pclk1 %"PRIu32"\r\n", clocks.PCLK1_Frequency);
 }
 

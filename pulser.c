@@ -1,7 +1,7 @@
 #include "pulser.h"
 #include "timed_events.h"
 #include "leds.h"
-#include "hi_res_timer.h"
+#include "main_input_timer.h"
 
 #include <coocox.h>
 
@@ -123,7 +123,7 @@ static void schedule_pulse(pulser_st * const pulser, pulser_schedule_st const * 
     uint32_t scheduling_latency;
 
     pulser->current_schedule = *pulser_schedule;
-    pulser->scheduled_at = hi_res_counter_val();
+    pulser->scheduled_at = main_input_timer_count_get();
     scheduling_latency = pulser->scheduled_at - pulser->current_schedule.programmed_at;
 
     initial_delay = pulser_schedule->initial_delay_us - scheduling_latency;
@@ -355,6 +355,6 @@ void print_pulser_debug(size_t const index)
            );
     printf("programmed at %"PRIu32" scheduled at %"PRIu32"\r\n", pulser->programmed_at, pulser->scheduled_at);
     printf("initial delay remaining: %"PRIu32" current time %"PRIu32"\r\n", 
-           (uint32_t)pulser->current_schedule.initial_delay_us, hi_res_counter_val());
+           (uint32_t)pulser->current_schedule.initial_delay_us, main_input_timer_count_get());
     printf("\r\n");
 }

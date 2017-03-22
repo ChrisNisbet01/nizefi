@@ -3,7 +3,7 @@
 #include "queue.h"
 #include "rpm_calculator.h"
 #include "leds.h"
-#include "hi_res_timer.h"
+#include "main_input_timer.h"
 #include "utils.h"
 
 #include <coocox.h>
@@ -271,7 +271,7 @@ static float trigger_36_1_synched_angle_get(trigger_wheel_36_1_context_st * cons
 
     CoLeaveMutexSection(context->teeth_mutex);
 
-    time_now = hi_res_counter_val();
+    time_now = main_input_timer_count_get();
     ticks_since_tooth_passed = time_now - tooth_timestamp;
     degrees_since_tooth_passed = rpm_calcuator_get_degrees_turned(context->rpm_calculator, (float)ticks_since_tooth_passed / TIMER_FREQUENCY);
 

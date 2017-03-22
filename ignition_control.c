@@ -1,7 +1,7 @@
 #include "ignition_control.h"
 #include "ignition_output.h"
 #include "main.h"
-#include "hi_res_timer.h"
+#include "main_input_timer.h"
 #include "utils.h"
 #include "pulser.h"
 
@@ -104,7 +104,7 @@ void ignition_pulse_callback(float const crank_angle,
     /* The injector pulse width must include the time taken to open the injector (dead time). */
     uint32_t const ignition_pulse_width_us = get_ignition_dwell_us();
     uint32_t ignition_us_until_open = lrintf(time_to_next_spark * TIMER_FREQUENCY) - ignition_pulse_width_us;
-    uint32_t const current_timestamp = hi_res_counter_val();
+    uint32_t const current_timestamp = main_input_timer_count_get();
     uint32_t const latency = current_timestamp - timestamp;
 
     ignition_us_until_open -= latency;

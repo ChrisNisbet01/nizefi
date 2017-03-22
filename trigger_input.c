@@ -1,7 +1,7 @@
 #include "trigger_input.h"
 #include "trigger_wheel_36_1.h"
 #include "queue.h"
-#include "hi_res_timer.h"
+#include "main_input_timer.h"
 #include "leds.h"
 #include "stm32f4_utils.h"
 
@@ -239,7 +239,7 @@ static void handle_cam_trigger_signal(uint32_t const timestamp)
 /* Handle external interrupt. */
 void EXTI0_IRQHandler(void)
 {
-    uint32_t timestamp = hi_res_counter_val();
+    uint32_t timestamp = main_input_timer_count_get();
 
     /* XXX - Need to determine the EXTI_Line to check for some 
      * other way. Hard-coded assumption that this is for the crank 
@@ -258,7 +258,7 @@ void EXTI0_IRQHandler(void)
 
 void EXTI9_5_IRQHandler(void)
 {
-    uint32_t timestamp = hi_res_counter_val();
+    uint32_t timestamp = main_input_timer_count_get();
 
     /* XXX - Need to determine the EXTI_Line to check for some 
      * other way. Hard-coded assumption that this is for the cam or 
@@ -440,7 +440,7 @@ static void configure_gpio_external_irq(trigger_gpio_config_st const * const gpi
     stm32f4_enable_IRQ(gpio_config->NVIC_IRQChannel, 0, 0);
 
     connect_pin_to_external_interrupt(gpio_config->EXTI_Line,
-                                      EXTI_Trigger_Falling); /* XXX - Configurable? */
+                                      EXTI_Trigger_Rising); /* XXX - Configurable? */
 }
 
 static void initialise_crank_trigger_input(void)
