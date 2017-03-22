@@ -4,11 +4,13 @@
  *           sprintf() and so on. This reduces the memory footprint of the
  *           binary when using those methods, compared to the libc implementation.
  ********************************************************************************/
+#include "utils.h"
+
+#include "usart.h"
+#include "stm32f4xx_usart.h"
 
 #include <stdio.h>
 #include <stdarg.h>
-#include "usart.h"
-#include "stm32f4xx_usart.h"
 #include <math.h>
 
 /**
@@ -267,6 +269,9 @@ signed int PutFloat(
     signed int width,
     float value)
 {
+    UNUSED(fill);
+    UNUSED(width);
+
     return ftoa(value, pStr, 5);
 }
 

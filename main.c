@@ -163,7 +163,7 @@ static void main_task(void * arg)
 {
     UNUSED(arg);
 
-    initSerialTask();
+    serial_task_init();
 
     fprintf(stderr, "CoOS RTOS: Started scheduler\r\n");
 
@@ -204,5 +204,9 @@ int main(void)
 
     CoStartOS(); /* Start scheduler. */
 
+    /* Shouldn't get here. */
+    while (1)
+    {
+    }
 }
 

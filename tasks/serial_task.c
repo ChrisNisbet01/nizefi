@@ -32,8 +32,14 @@ static serialCli_st serialCli[ARRAY_SIZE(serial_ports)];
 serial_port_st *debug_port;
 static struct cli_context_st
 {
-    OS_FlagID periodicTasksTimerFlag;
-    OS_FlagID cliUartFlag;
+    OS_FlagID periodic_tasks_timer_flag;
+    uint32_t periodic_tasks_timer_bit;
+
+    OS_FlagID cli_data_ready_flag;
+    uint32_t cli_data_ready_bit;
+
+    uint32_t all_flags;
+
     OS_STK cli_task_stack[CLI_TASK_STACK_SIZE];
 } cli_context;
 
@@ -66,26 +72,23 @@ int debug_put_block(void * data, size_t len)
     return len;
 }
 
-uint32_t new_time;
-
-static void debugTimer( void )
+static void periodic_timer_cb( void )
 {
-    new_time = SysTick->VAL;
-    isr_SetFlag(cli_context.periodicTasksTimerFlag);
+    isr_SetFlag(cli_context.periodic_tasks_timer_flag);
 }
 
-static void newUartData( void *pv )
+static void new_uart_data_cb( void *pv )
 {
 	UNUSED(pv);
 
     CoEnterISR();
 
-    isr_SetFlag(cli_context.cliUartFlag);
+    isr_SetFlag(cli_context.cli_data_ready_flag);
 
 	CoExitISR();
 }
 
-static void handleNewSerialData( void )
+static void handle_new_serial_data(void)
 {
 	unsigned int uart_index;
     static size_t output_index;
@@ -100,7 +103,6 @@ static void handleNewSerialData( void )
 
 				ch = serialCli[uart_index].cli_uart->methods->readChar( serialCli[uart_index].cli_uart->serialCtx );
 
-                /* Just echo the char back for now. */
                 if (ch >= 0)
                 {
                     //uartPutChar(serialCli[uart_index].cli_uart, ch);
@@ -157,18 +159,7 @@ static void handleNewSerialData( void )
 	}
 }
 
-void show_sysclock_info(uint32_t val)
-{
-    RCC_ClocksTypeDef clocks;
-
-    RCC_GetClocksFreq(&clocks);
-    printf("clock rate count %"PRIu32"\r\n", val);
-    printf("new_time         %"PRIu32"\r\n", new_time);
-    printf("hi_res_counter_val %"PRIu32"\r\n", main_input_timer_count_get());
-    printf("pclk1 %"PRIu32"\r\n", clocks.PCLK1_Frequency);
-}
-
-static void doPeriodicSerialTasks(void)
+static void do_periodic_serial_tasks(void)
 {
 }
 
@@ -178,28 +169,28 @@ static void cli_task(void * pv)
 
     UNUSED(pv);
 
-    debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, debugTimer);
+    debugTimerID = CoCreateTmr(TMR_TYPE_PERIODIC, CFG_SYSTICK_FREQ, CFG_SYSTICK_FREQ, periodic_timer_cb);
     CoStartTmr(debugTimerID);
 
     while (1)
     {
         StatusType err;
-        U32 readyFlags = (1 << cli_context.cliUartFlag);
+        U32 readyFlags;
 
-        readyFlags = CoWaitForMultipleFlags((1 << cli_context.periodicTasksTimerFlag) | (1 << cli_context.cliUartFlag), OPT_WAIT_ANY, 0, &err);
-        if ((readyFlags & (1 << cli_context.cliUartFlag)))
+        readyFlags = CoWaitForMultipleFlags(cli_context.all_flags, OPT_WAIT_ANY, 0, &err);
+        if ((readyFlags & cli_context.cli_data_ready_bit) != 0)
         {
-            handleNewSerialData();
+            handle_new_serial_data();
         }
 
-        if ((readyFlags & (1 << cli_context.periodicTasksTimerFlag)))
+        if ((readyFlags & cli_context.periodic_tasks_timer_bit) != 0)
         {
-            doPeriodicSerialTasks();
+            do_periodic_serial_tasks();
         }
     }
 }
 
-bool setDebugPort( int port )
+bool set_debug_port( int port )
 {
 	bool debugPortAssigned = true;
 
@@ -220,18 +211,22 @@ bool setDebugPort( int port )
 	return debugPortAssigned;
 }
 
-void initSerialTask( void )
+void serial_task_init(void)
 {
 	unsigned int cli_index;
 
-    cli_context.periodicTasksTimerFlag = CoCreateFlag(Co_TRUE, Co_FALSE);
-    cli_context.cliUartFlag = CoCreateFlag(Co_TRUE, Co_FALSE);
+    cli_context.periodic_tasks_timer_flag = CoCreateFlag(Co_TRUE, Co_FALSE);
+    cli_context.periodic_tasks_timer_bit = 1 << cli_context.periodic_tasks_timer_flag;
+    cli_context.cli_data_ready_flag = CoCreateFlag(Co_TRUE, Co_FALSE);
+    cli_context.cli_data_ready_bit = 1 << cli_context.cli_data_ready_flag;
 
+    cli_context.all_flags = cli_context.periodic_tasks_timer_bit | cli_context.cli_data_ready_bit;
+    
 	for ( cli_index = 0 ; cli_index < ARRAY_SIZE(serial_ports); cli_index++ )
 	{
-		serialCli[cli_index].cli_uart = serialOpen( serial_ports[cli_index], 115200, uart_mode_rx | uart_mode_tx, newUartData );
+        serialCli[cli_index].cli_uart = serialOpen(serial_ports[cli_index], 115200, uart_mode_rx | uart_mode_tx, new_uart_data_cb);
 	}
-    setDebugPort(0); /* Temp debug assign the debug port right now until we have a CLI command that allows it to be turned on/off. */
+    set_debug_port(0); /* Temp debug assign the debug port right now until we have a CLI command that allows it to be turned on/off. */
 
     serialTaskID = CoCreateTask(cli_task, Co_NULL, SERIAL_TASK_PRIORITY, &cli_context.cli_task_stack[CLI_TASK_STACK_SIZE - 1], CLI_TASK_STACK_SIZE);
 }
