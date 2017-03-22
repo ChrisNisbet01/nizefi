@@ -102,7 +102,7 @@ If disable(0),CoOS use Binary-Scheduling Algorithm.
 /*!<
 Enable(1) or disable(0) Round-Robin Task switching.
 */
-#define CFG_ROBIN_EN            (1)
+#define CFG_ROBIN_EN            (0)
 
 /*!<
 Default slice of task.
@@ -164,7 +164,7 @@ Enable(1) or disable(0) stack overflow checkout .
 /*!<
 Enable(1) or disable(0) memory management.
 */
-#define CFG_MM_EN               (1)
+#define CFG_MM_EN               (0)
 
 /*!<
 Max number of memory.(must be less than 32).
@@ -179,7 +179,7 @@ Max number of memory.(must be less than 32).
 /*!<
 Enable(1) or disable(0) kernel heap management.
 */
-#define CFG_KHEAP_EN            (1)
+#define CFG_KHEAP_EN            (0)
 
 /*!<
 Kernel heap size(word).
