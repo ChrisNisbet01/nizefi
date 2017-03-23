@@ -1,6 +1,6 @@
 #include "stm32f4_utils.h"
 
-#include <stm32f4xx_rcc.h>
+#include "stm32f4xx_rcc.h"
 
 void stm32f4_enable_IRQ(uint_fast8_t const irq,
                         uint_fast8_t const priority,

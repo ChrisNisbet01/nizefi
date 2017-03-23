@@ -6,6 +6,7 @@
 
 bool set_debug_port(int port);
 int debug_put_block(void * data, size_t len);
+void debug_put_char(char ch);
 
 void serial_task_init(void);
 

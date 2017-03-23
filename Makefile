@@ -48,10 +48,10 @@ OPTIMISE_FLAGS = -O2
 
 
 INCLUDE_DIRS = \
-			$(SRC_DIR) \
+			$(SRC_DIR)/app \
 			$(SRC_DIR)/drivers \
 			$(SRC_DIR)/timers \
-			$(SRC_DIR)/tasks \
+			$(SRC_DIR)/serial \
 			$(COOS_DIR) \
 			$(COOS_DIR)/portable \
 			$(COOS_DIR)/kernel
@@ -120,25 +120,13 @@ LDFLAGS = $(CPU_FLAGS) \
 
 # now specify source files
 COMMON_SRC = \
-	$(SRC_DIR)/gpio_output.c \
-	$(SRC_DIR)/ignition_control.c \
-	$(SRC_DIR)/injector_control.c \
-	$(SRC_DIR)/leds.c \
-	$(SRC_DIR)/stm32f4_utils.c \
-	$(SRC_DIR)/utils.c \
-	$(SRC_DIR)/stdio/printf.c \
-	$(SRC_DIR)/main.c \
-	$(SRC_DIR)/trigger_input.c \
-	$(SRC_DIR)/rpm_calculator.c \
-	$(SRC_DIR)/trigger_wheel_36_1.c \
-	$(SRC_DIR)/pulser.c \
-	$(SRC_DIR)/ignition_output.c \
-	$(SRC_DIR)/injector_output.c \
+	$(SRC_DIR)/stdio/*.c \
 	$(SRC_DIR)/timers/*.c \
 	$(SRC_DIR)/drivers/serial.c \
 	$(SRC_DIR)/drivers/uart.c \
 	$(SRC_DIR)/drivers/usart.c \
-	$(SRC_DIR)/tasks/*.c
+	$(SRC_DIR)/serial/*.c \
+	$(SRC_DIR)/app/*.c
 
 COOS_SRC = $(COOS_DIR)/kernel/*.c \
            $(COOS_DIR)/portable/*.c

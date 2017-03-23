@@ -3,11 +3,11 @@
 #include "stm32f4_utils.h"
 #include "utils.h"
 
+#include "stm32f4xx_tim.h"
+#include "stm32f4xx_rcc.h"
+
 #include <stdlib.h>
 #include <stdbool.h>
-
-#include <stm32f4xx_tim.h>
-#include <stm32f4xx_rcc.h>
 
 typedef enum channel_index_t
 {

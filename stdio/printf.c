@@ -5,9 +5,7 @@
  *           binary when using those methods, compared to the libc implementation.
  ********************************************************************************/
 #include "utils.h"
-
-#include "usart.h"
-#include "stm32f4xx_usart.h"
+#include "serial_task.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -22,8 +20,6 @@
  */
 void PrintChar(char c)
 {
-    void debug_put_char(char ch);
-
     debug_put_char(c);
 }
 

@@ -1,6 +1,8 @@
 #ifndef __SERIAL_H__
 #define __SERIAL_H__
 
+#include <stdint.h>
+
 typedef enum serial_port_t
 {
 	SERIAL_UART_1,

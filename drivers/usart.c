@@ -1,27 +1,26 @@
 #include "stm32f4_utils.h"
 #include "utils.h"
+#include "usart.h"
+
+#if defined(STM32F30X)
+#include "stm32f30x_usart.h"
+#include "stm32f30x_gpio.h"
+#include "stm32f30x_rcc.h"
+#include "stm32f30x_misc.h"
+#elif defined(STM32F4XX)
+#include "stm32f4xx_usart.h"
+#include "stm32f4xx_gpio.h"
+#include "stm32f4xx_rcc.h"
+#include "misc.h"
+#elif defined(STM32F10X)
+#include "stm32f10x_usart.h"
+#include "stm32f10x_gpio.h"
+#include "stm32f10x_rcc.h"
+#include "misc.h"
+#endif
 
 #include <stdlib.h>
 #include <stdint.h>
-
-#if defined(STM32F30X)
-#include <stm32f30x_usart.h>
-#include <stm32f30x_gpio.h>
-#include <stm32f30x_rcc.h>
-#include <stm32f30x_misc.h>
-#elif defined(STM32F4XX)
-#include <stm32f4xx_usart.h>
-#include <stm32f4xx_gpio.h>
-#include <stm32f4xx_rcc.h>
-#include <misc.h>
-#elif defined(STM32F10X)
-#include <stm32f10x_usart.h>
-#include <stm32f10x_gpio.h>
-#include <stm32f10x_rcc.h>
-#include <misc.h>
-#endif
-
-#include "usart.h"
 
 typedef enum usart_idx_t {
 	USART1_IDX,

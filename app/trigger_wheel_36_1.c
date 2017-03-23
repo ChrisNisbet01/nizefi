@@ -6,7 +6,7 @@
 #include "main_input_timer.h"
 #include "utils.h"
 
-#include <coocox.h>
+#include "CoOS.h"
 
 #include <stddef.h>
 #include <stdbool.h>

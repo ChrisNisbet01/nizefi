@@ -1,16 +1,19 @@
+#include "serial_task.h"
+#include "serial.h"
+#include "main_input_timer.h"
+#include "pulser.h"
+#include "utils.h"
+
+#include "stm32f4xx_gpio.h"
+
+#include "CoOS.h"
+
 #include <inttypes.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <math.h>
-#include <coocox.h>
-#include <serial.h>
-#include "main_input_timer.h"
-#include "pulser.h"
-#include "utils.h"
-
-#include <stm32f4xx_gpio.h>
 
 #define CLI_TASK_STACK_SIZE 1024
 #define SERIAL_TASK_PRIORITY 4

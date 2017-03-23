@@ -20,19 +20,9 @@
   */
 
 /*---------------------------- Include ---------------------------------------*/
-#include <stdio.h>
-#include <CoOS.h>
-#include <OsArch.h>
 
 #include "stm32f4xx.h"
-#include "stm32f4xx_gpio.h"
-#include <stm32f4xx_tim.h>
-
-#include "stm32f4xx_rcc.h"
-#include "stm32f4xx_exti.h"
-#include "stm32f4xx_syscfg.h"
 #include "usart.h"
-
 #include "timed_events.h"
 #include "pulser.h"
 #include "injector_control.h"
@@ -44,6 +34,16 @@
 #include "queue.h"
 #include "utils.h"
 
+#include "stm32f4xx_rcc.h"
+#include "stm32f4xx_exti.h"
+#include "stm32f4xx_syscfg.h"
+#include "stm32f4xx_gpio.h"
+#include "stm32f4xx_tim.h"
+
+#include "CoOS.h"
+#include "OsArch.h"
+
+#include <stdio.h>
 #include <math.h>
 #include <inttypes.h>
 

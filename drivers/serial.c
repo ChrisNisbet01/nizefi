@@ -1,12 +1,12 @@
+#include "CoOS.h"
+#include "serial.h"
+#include "uart.h"
+#if defined(STM32F30X)
+#include "serial_usb.h"
+#endif
+
 #include <stdlib.h>
 #include <stdint.h>
-
-#include <CoOS.h>
-#include <serial.h>
-#include <uart.h>
-#if defined(STM32F30X)
-#include <serial_usb.h>
-#endif
 
 serial_port_st * serialOpen( serial_port_t port, uint32_t baudrate, serial_modes_t mode, void (*newRxDataCb)( void *pv ) )
 {

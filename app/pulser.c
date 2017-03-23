@@ -3,7 +3,7 @@
 #include "leds.h"
 #include "main_input_timer.h"
 
-#include <coocox.h>
+#include "CoOS.h"
 
 #include <stdbool.h>
 #include <stddef.h>

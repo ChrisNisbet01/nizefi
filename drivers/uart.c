@@ -1,15 +1,15 @@
 #include "utils.h"
-#include <stdlib.h>
-#include <stdint.h>
-
-#include <stm32f4xx_usart.h>
-
-#include "usart.h"
-#include <CoOS.h>
-#include "OsArch.h"
-
 #include "uart_interface.h"
 #include "serial.h"
+#include "usart.h"
+
+#include "stm32f4xx_usart.h"
+
+#include "CoOS.h"
+#include "OsArch.h"
+
+#include <stdlib.h>
+#include <stdint.h>
 
 #define USART1_RX_BUFFER_SIZE	128	/* must be power of two */
 #define USART1_TX_BUFFER_SIZE	128
